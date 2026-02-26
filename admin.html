@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RYOPOS | پنل مدیریت</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #050810;
+  --bg2:      #080d1a;
+  --card:     rgba(255,255,255,0.04);
+  --card-h:   rgba(255,255,255,0.07);
+  --border:   rgba(255,255,255,0.08);
+  --border-h: rgba(255,255,255,0.18);
+  --accent:   #c8832a;
+  --accent-l: #e8a84a;
+  --accent-g: rgba(200,131,42,0.3);
+  --text:     #f0ece4;
+  --text2:    #9a9485;
+  --text3:    #5a5650;
+  --success:  #2ecc71;
+  --danger:   #e74c3c;
+  --warn:     #f1c40f;
+}
+*,*::before,*::after { box-sizing:border-box; margin:0; padding:0 }
+html { scroll-behavior:smooth }
+body { font-family:'Vazirmatn',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; overflow-x:hidden }
+body::before { content:''; position:fixed; inset:0; background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(200,131,42,0.15) 0%,transparent 70%); pointer-events:none; z-index:0 }
+
+/* ── LOGIN SCREEN ── */
+.login-screen { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:100; background:var(--bg) }
+.login-box { background:rgba(12,17,35,0.97); border:1px solid var(--border-h); border-radius:18px; padding:3rem 2.5rem; width:100%; max-width:400px; text-align:center; animation:slideUp .4s ease }
+.login-logo { font-size:2rem; font-weight:900; letter-spacing:3px; background:linear-gradient(135deg,var(--accent-l),var(--accent)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; margin-bottom:.3rem }
+.login-sub { font-size:.8rem; color:var(--text3); letter-spacing:2px; text-transform:uppercase; margin-bottom:2.5rem }
+.login-box input { width:100%; background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:9px; padding:.85rem 1.1rem; font-size:.95rem; font-family:'Vazirmatn',sans-serif; color:var(--text); outline:none; transition:border .2s; margin-bottom:1rem; text-align:center; letter-spacing:3px }
+.login-box input:focus { border-color:rgba(200,131,42,.5) }
+.login-box input::placeholder { letter-spacing:0; color:var(--text3) }
+.login-err { font-size:.82rem; color:var(--danger); margin-bottom:1rem; display:none }
+.login-err.show { display:block }
+
+/* ── LAYOUT ── */
+.layout { display:none; min-height:100vh }
+.layout.show { display:flex }
+.sidebar { width:240px; flex-shrink:0; background:rgba(8,13,26,0.95); border-left:1px solid var(--border); display:flex; flex-direction:column; position:fixed; top:0; right:0; bottom:0; z-index:50; backdrop-filter:blur(20px) }
+.sidebar-logo { padding:1.5rem 1.5rem 1rem; border-bottom:1px solid var(--border) }
+.sidebar-logo-text { font-size:1.3rem; font-weight:900; letter-spacing:2px; background:linear-gradient(135deg,var(--accent-l),var(--accent)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text }
+.sidebar-logo-sub { font-size:.65rem; color:var(--text3); letter-spacing:2px; text-transform:uppercase; margin-top:.2rem }
+.sidebar-nav { padding:1rem .8rem; flex:1; display:flex; flex-direction:column; gap:.3rem }
+.nav-item { display:flex; align-items:center; gap:.8rem; padding:.75rem 1rem; border-radius:9px; cursor:pointer; color:var(--text2); font-size:.9rem; font-weight:500; transition:all .2s; border:1px solid transparent }
+.nav-item:hover { background:var(--card); color:var(--text) }
+.nav-item.active { background:rgba(200,131,42,.12); border-color:rgba(200,131,42,.25); color:var(--accent-l) }
+.nav-item .icon { font-size:1.1rem; width:22px; text-align:center; flex-shrink:0 }
+.sidebar-footer { padding:1rem 1.5rem; border-top:1px solid var(--border) }
+.sidebar-footer button { width:100%; background:rgba(231,76,60,.1); border:1px solid rgba(231,76,60,.25); border-radius:8px; color:#e74c3c; font-family:'Vazirmatn',sans-serif; font-size:.85rem; font-weight:600; padding:.65rem; cursor:pointer; transition:all .2s }
+.sidebar-footer button:hover { background:rgba(231,76,60,.2) }
+.main { margin-right:240px; flex:1; padding:2rem 2.5rem; position:relative; z-index:1 }
+.page { display:none }
+.page.active { display:block }
+.page-title { font-size:1.5rem; font-weight:800; margin-bottom:.3rem }
+.page-sub { font-size:.85rem; color:var(--text3); margin-bottom:2rem }
+
+/* ── STAT CARDS ── */
+.stat-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:2rem }
+.stat-card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:1.5rem; position:relative; overflow:hidden; transition:border .2s }
+.stat-card:hover { border-color:var(--border-h) }
+.stat-card::before { content:''; position:absolute; top:0; right:0; left:0; height:2px; background:linear-gradient(90deg,transparent,var(--accent),transparent); opacity:0; transition:opacity .3s }
+.stat-card:hover::before { opacity:1 }
+.stat-label { font-size:.72rem; color:var(--text3); font-weight:700; letter-spacing:1.5px; text-transform:uppercase; margin-bottom:.6rem }
+.stat-val { font-size:2rem; font-weight:900; background:linear-gradient(135deg,#fff,var(--accent-l)); -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text; line-height:1 }
+.stat-icon { position:absolute; top:1.2rem; left:1.2rem; font-size:1.5rem; opacity:.3 }
+.stat-change { font-size:.75rem; color:var(--text3); margin-top:.4rem }
+.stat-change.up { color:var(--success) }
+
+/* ── TABLE ── */
+.table-wrap { background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden }
+.table-head { padding:1.2rem 1.5rem; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem }
+.table-title { font-size:1rem; font-weight:700 }
+.search-input { background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:7px; padding:.5rem 1rem; font-size:.85rem; font-family:'Vazirmatn',sans-serif; color:var(--text); outline:none; width:220px; transition:border .2s }
+.search-input:focus { border-color:rgba(200,131,42,.4) }
+.search-input::placeholder { color:var(--text3) }
+table { width:100%; border-collapse:collapse }
+th { padding:.9rem 1.2rem; text-align:right; font-size:.72rem; font-weight:700; color:var(--text3); letter-spacing:1px; text-transform:uppercase; border-bottom:1px solid var(--border); white-space:nowrap }
+td { padding:.9rem 1.2rem; font-size:.85rem; border-bottom:1px solid rgba(255,255,255,.04); vertical-align:middle }
+tr:last-child td { border-bottom:none }
+tr:hover td { background:rgba(255,255,255,.02) }
+.badge { display:inline-flex; align-items:center; gap:.3rem; padding:.25rem .75rem; border-radius:100px; font-size:.72rem; font-weight:600 }
+.badge-paid    { background:rgba(46,204,113,.12);  border:1px solid rgba(46,204,113,.25);  color:var(--success) }
+.badge-pending { background:rgba(241,196,15,.1);   border:1px solid rgba(241,196,15,.25);  color:var(--warn) }
+.badge-failed  { background:rgba(231,76,60,.1);    border:1px solid rgba(231,76,60,.25);   color:var(--danger) }
+.badge-premium { background:rgba(200,131,42,.12);  border:1px solid rgba(200,131,42,.3);   color:var(--accent-l) }
+.badge-basic   { background:rgba(255,255,255,.06); border:1px solid var(--border-h);       color:var(--text2) }
+.mono { font-family:monospace; font-size:.78rem; color:var(--text2) }
+.copy-btn { background:none; border:none; color:var(--accent); cursor:pointer; font-size:.8rem; padding:.2rem .4rem; border-radius:4px; transition:background .2s }
+.copy-btn:hover { background:rgba(200,131,42,.1) }
+.empty-state { text-align:center; padding:4rem; color:var(--text3) }
+.empty-state .emoji { font-size:3rem; margin-bottom:1rem }
+
+/* ── BUTTONS ── */
+.btn { padding:.55rem 1.2rem; border-radius:7px; font-size:.85rem; font-weight:600; cursor:pointer; border:none; font-family:'Vazirmatn',sans-serif; transition:all .25s; display:inline-flex; align-items:center; gap:.5rem }
+.btn-gold { background:linear-gradient(135deg,var(--accent),#a06520); color:#fff; box-shadow:0 0 15px var(--accent-g) }
+.btn-gold:hover { transform:translateY(-1px); box-shadow:0 4px 20px var(--accent-g) }
+.btn-outline { background:transparent; border:1px solid var(--border-h); color:var(--text) }
+.btn-outline:hover { background:var(--card-h) }
+.btn-danger { background:rgba(231,76,60,.12); border:1px solid rgba(231,76,60,.3); color:var(--danger) }
+.btn-danger:hover { background:rgba(231,76,60,.22) }
+.btn-sm { padding:.35rem .8rem; font-size:.78rem }
+
+/* ── MODAL ── */
+.overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); backdrop-filter:blur(6px); z-index:200; display:none; align-items:center; justify-content:center; padding:1rem }
+.overlay.show { display:flex }
+.modal { background:rgba(12,17,35,.97); border:1px solid var(--border-h); border-radius:14px; padding:2rem; width:100%; max-width:480px; position:relative; animation:slideUp .3s ease }
+.modal-close { position:absolute; top:.8rem; left:.8rem; background:var(--card); border:1px solid var(--border); border-radius:5px; width:28px; height:28px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--text2); font-size:.85rem }
+.modal-close:hover { background:var(--card-h) }
+.modal-title { font-size:1.2rem; font-weight:800; margin-bottom:1.5rem }
+.form-group { margin-bottom:1rem }
+label { display:block; font-size:.78rem; font-weight:700; color:var(--text2); margin-bottom:.4rem; letter-spacing:.5px }
+input, select { width:100%; background:rgba(255,255,255,.04); border:1px solid var(--border); border-radius:8px; padding:.7rem 1rem; font-size:.9rem; font-family:'Vazirmatn',sans-serif; color:var(--text); outline:none; transition:border .2s }
+input:focus, select:focus { border-color:rgba(200,131,42,.5) }
+select option { background:#0d1225 }
+
+/* ── TOAST ── */
+.toast-wrap { position:fixed; bottom:1.5rem; left:50%; transform:translateX(-50%); z-index:500; display:flex; flex-direction:column; gap:.5rem; align-items:center; pointer-events:none }
+.toast { background:rgba(20,25,45,.97); border:1px solid var(--border-h); border-radius:9px; padding:.65rem 1.3rem; font-size:.85rem; color:var(--text); display:flex; align-items:center; gap:.5rem; box-shadow:0 8px 30px rgba(0,0,0,.5); animation:toastIn .3s ease; white-space:nowrap }
+.toast.success { border-color:rgba(46,204,113,.35); color:var(--success) }
+.toast.error   { border-color:rgba(231,76,60,.35);  color:var(--danger) }
+
+/* ── LOADING ── */
+.spinner { display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.2); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite }
+.skeleton { background:linear-gradient(90deg,rgba(255,255,255,.04) 25%,rgba(255,255,255,.08) 50%,rgba(255,255,255,.04) 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; height:20px }
+@keyframes shimmer { to { background-position:-200% 0 } }
+@keyframes spin    { to { transform:rotate(360deg) } }
+@keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes toastIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+/* ── LICENSE DETAIL ── */
+.license-detail { background:rgba(200,131,42,.06); border:1px solid rgba(200,131,42,.2); border-radius:8px; padding:.8rem 1rem; margin-top:.5rem }
+.license-detail .key { font-family:monospace; font-size:.72rem; color:var(--text2); word-break:break-all; line-height:1.6 }
+
+/* ── RESPONSIVE ── */
+@media(max-width:900px) { .stat-grid{grid-template-columns:repeat(2,1fr)} .main{padding:1.5rem} }
+@media(max-width:700px) { .sidebar{display:none} .main{margin-right:0} .stat-grid{grid-template-columns:1fr 1fr} }
+</style>
+</head>
+<body>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- ── LOGIN ── -->
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">RYOPOS</div>
+    <div class="login-sub">پنل مدیریت</div>
+    <input type="password" id="adminPass" placeholder="رمز عبور ادمین" onkeydown="if(event.key==='Enter')doAdminLogin()">
+    <div class="login-err" id="loginErr">رمز عبور اشتباه است</div>
+    <button class="btn btn-gold" style="width:100%;justify-content:center;padding:.85rem" onclick="doAdminLogin()">ورود به پنل</button>
+  </div>
+</div>
+
+<!-- ── LAYOUT ── -->
+<div class="layout" id="adminLayout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-text">RYOPOS</div>
+      <div class="sidebar-logo-sub">Admin Panel</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="icon">📊</span> داشبورد</div>
+      <div class="nav-item" onclick="showPage('users',this)"><span class="icon">👥</span> کاربران</div>
+      <div class="nav-item" onclick="showPage('purchases',this)"><span class="icon">💳</span> خریدها</div>
+      <div class="nav-item" onclick="showPage('licenses',this)"><span class="icon">🔑</span> لایسنس‌ها</div>
+      <div class="nav-item" onclick="showPage('makeLicense',this)"><span class="icon">✨</span> صدور دستی</div>
+    </nav>
+    <div class="sidebar-footer">
+      <button onclick="adminLogout()">خروج از پنل</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- DASHBOARD PAGE -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-title">داشبورد</div>
+      <div class="page-sub">خلاصه وضعیت سیستم</div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-label">کل کاربران</div><div class="stat-val" id="s-users">—</div></div>
+        <div class="stat-card"><div class="stat-icon">💳</div><div class="stat-label">خریدهای موفق</div><div class="stat-val" id="s-paid">—</div></div>
+        <div class="stat-card"><div class="stat-icon">🔑</div><div class="stat-label">لایسنس‌های فعال</div><div class="stat-val" id="s-licenses">—</div></div>
+        <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-label">درآمد کل (تومان)</div><div class="stat-val" id="s-revenue">—</div></div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-head"><div class="table-title">آخرین خریدها</div></div>
+        <table><thead><tr><th>کاربر</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>تاریخ</th></tr></thead>
+        <tbody id="recentPurchases"><tr><td colspan="5" class="empty-state"><div class="spinner" style="margin:0 auto"></div></td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- USERS PAGE -->
+    <div class="page" id="page-users">
+      <div class="page-title">مدیریت کاربران</div>
+      <div class="page-sub">لیست تمام کاربران ثبت‌نام‌شده</div>
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">کاربران <span id="userCount" style="color:var(--text3);font-weight:400;font-size:.85rem"></span></div>
+          <input class="search-input" placeholder="🔍 جستجو..." oninput="filterTable('usersTable',this.value)">
+        </div>
+        <table id="usersTable">
+          <thead><tr><th>#</th><th>نام</th><th>ایمیل</th><th>موبایل</th><th>تاریخ ثبت</th><th>عملیات</th></tr></thead>
+          <tbody id="usersList"><tr><td colspan="6" class="empty-state"><div class="spinner" style="margin:0 auto"></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PURCHASES PAGE -->
+    <div class="page" id="page-purchases">
+      <div class="page-title">مدیریت خریدها</div>
+      <div class="page-sub">تمام تراکنش‌های ثبت‌شده</div>
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">خریدها <span id="purchaseCount" style="color:var(--text3);font-weight:400;font-size:.85rem"></span></div>
+          <input class="search-input" placeholder="🔍 جستجو..." oninput="filterTable('purchasesTable',this.value)">
+        </div>
+        <table id="purchasesTable">
+          <thead><tr><th>#</th><th>کاربر ID</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>Hardware ID</th><th>تاریخ</th></tr></thead>
+          <tbody id="purchasesList"><tr><td colspan="7" class="empty-state"><div class="spinner" style="margin:0 auto"></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LICENSES PAGE -->
+    <div class="page" id="page-licenses">
+      <div class="page-title">لایسنس‌های صادرشده</div>
+      <div class="page-sub">لیست تمام کدهای لایسنس</div>
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">لایسنس‌ها <span id="licenseCount" style="color:var(--text3);font-weight:400;font-size:.85rem"></span></div>
+          <input class="search-input" placeholder="🔍 جستجو..." oninput="filterTable('licensesTable',this.value)">
+        </div>
+        <table id="licensesTable">
+          <thead><tr><th>#</th><th>کاربر ID</th><th>پلن</th><th>Hardware ID</th><th>کلید لایسنس</th><th>تاریخ</th></tr></thead>
+          <tbody id="licensesList"><tr><td colspan="6" class="empty-state"><div class="spinner" style="margin:0 auto"></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MAKE LICENSE PAGE -->
+    <div class="page" id="page-makeLicense">
+      <div class="page-title">صدور لایسنس دستی</div>
+      <div class="page-sub">برای کاربران خاص بدون پرداخت آنلاین لایسنس صادر کن</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:2rem;max-width:500px">
+        <div class="form-group">
+          <label>Hardware ID کاربر</label>
+          <input type="text" id="manualHwId" placeholder="A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6">
+        </div>
+        <div class="form-group">
+          <label>پلن</label>
+          <select id="manualPlan">
+            <option value="basic">پایه</option>
+            <option value="premium">پریمیوم</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>مدت اعتبار (روز)</label>
+          <input type="number" id="manualDays" value="36500" min="1" max="36500">
+        </div>
+        <button class="btn btn-gold" onclick="generateManual()" id="genBtn">✨ صدور لایسنس</button>
+
+        <div id="manualResult" style="display:none;margin-top:1.5rem">
+          <div class="license-detail">
+            <div style="font-size:.75rem;color:var(--accent);font-weight:700;letter-spacing:1px;margin-bottom:.5rem">🔑 کلید لایسنس صادرشده</div>
+            <div class="key" id="manualLicenseKey"></div>
+            <button class="copy-btn" style="margin-top:.5rem" onclick="copyText(document.getElementById('manualLicenseKey').textContent)">📋 کپی</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- User Detail Modal -->
+<div class="overlay" id="userModal" onclick="closeOverlay(event,'userModal')">
+  <div class="modal">
+    <div class="modal-close" onclick="closeModal('userModal')">✕</div>
+    <div class="modal-title">جزئیات کاربر</div>
+    <div id="userModalContent"></div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────
+const API       = 'https://ryopos-server-production.up.railway.app';
+const ADMIN_KEY = 'change-admin-key-!!!'; // ← با ADMIN_KEY سرورت عوض کن
+
+// ── LOGIN ───────────────────────────────────────────────
+function doAdminLogin() {
+  const pass = document.getElementById('adminPass').value;
+  if (pass === ADMIN_KEY) {
+    document.getElementById('loginScreen').style.display  = 'none';
+    document.getElementById('adminLayout').classList.add('show');
+    loadDashboard();
+  } else {
+    document.getElementById('loginErr').classList.add('show');
+    document.getElementById('adminPass').value = '';
+  }
+}
+document.getElementById('adminPass').addEventListener('keydown', e => {
+  if (e.key === 'Enter') doAdminLogin();
+});
+
+function adminLogout() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('adminLayout').classList.remove('show');
+  document.getElementById('adminPass').value = '';
+  document.getElementById('loginErr').classList.remove('show');
+}
+
+// ── API HELPER ──────────────────────────────────────────
+async function api(path) {
+  const res = await fetch(API + path, {
+    headers: { 'X-Admin-Key': ADMIN_KEY }
+  });
+  if (!res.ok) throw new Error('خطای سرور');
+  return res.json();
+}
+
+// ── NAVIGATION ──────────────────────────────────────────
+function showPage(name, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  el.classList.add('active');
+
+  if (name === 'dashboard')   loadDashboard();
+  if (name === 'users')       loadUsers();
+  if (name === 'purchases')   loadPurchases();
+  if (name === 'licenses')    loadLicenses();
+}
+
+// ── DASHBOARD ───────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const [users, purchases] = await Promise.all([
+      api('/admin/users'),
+      api('/admin/purchases')
+    ]);
+
+    const paid     = purchases.filter(p => p.status === 'paid');
+    const licenses = purchases.filter(p => p.license_key);
+    const revenue  = paid.reduce((s, p) => s + (p.amount || 0), 0);
+
+    document.getElementById('s-users').textContent    = users.length;
+    document.getElementById('s-paid').textContent     = paid.length;
+    document.getElementById('s-licenses').textContent = licenses.length;
+    document.getElementById('s-revenue').textContent  = (revenue / 1000000).toFixed(1) + 'M';
+
+    const recent = paid.slice(0, 8);
+    document.getElementById('recentPurchases').innerHTML = recent.length
+      ? recent.map(p => `<tr>
+          <td>${p.user_id}</td>
+          <td><span class="badge badge-${p.plan}">${p.plan === 'premium' ? 'پریمیوم ✦' : 'پایه'}</span></td>
+          <td>${Number(p.amount).toLocaleString('fa-IR')} ت</td>
+          <td><span class="badge badge-paid">✓ موفق</span></td>
+          <td>${fDate(p.paid_at)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" class="empty-state"><div class="emoji">📭</div>خریدی ثبت نشده</td></tr>';
+  } catch (e) {
+    toast('خطا در بارگذاری داشبورد: ' + e.message, 'error');
+  }
+}
+
+// ── USERS ───────────────────────────────────────────────
+async function loadUsers() {
+  document.getElementById('usersList').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></td></tr>';
+  try {
+    const users = await api('/admin/users');
+    document.getElementById('userCount').textContent = `(${users.length} نفر)`;
+    document.getElementById('usersList').innerHTML = users.length
+      ? users.map((u, i) => `<tr>
+          <td class="mono">${i + 1}</td>
+          <td style="font-weight:600">${u.fullname}</td>
+          <td class="mono">${u.email}</td>
+          <td class="mono">${u.phone}</td>
+          <td>${fDate(u.created_at)}</td>
+          <td><button class="btn btn-outline btn-sm" onclick="showUserDetail(${u.id})">جزئیات</button></td>
+        </tr>`).join('')
+      : '<tr><td colspan="6" class="empty-state"><div class="emoji">👥</div>کاربری ثبت نشده</td></tr>';
+  } catch (e) {
+    toast('خطا: ' + e.message, 'error');
+  }
+}
+
+async function showUserDetail(userId) {
+  document.getElementById('userModal').classList.add('show');
+  document.getElementById('userModalContent').innerHTML = '<div style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></div>';
+  try {
+    const purchases = await api('/admin/purchases');
+    const userPurchases = purchases.filter(p => p.user_id === userId);
+    const paid = userPurchases.filter(p => p.status === 'paid');
+    document.getElementById('userModalContent').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:9px;padding:1rem;text-align:center">
+          <div style="font-size:.7rem;color:var(--text3);margin-bottom:.3rem">کل خرید</div>
+          <div style="font-size:1.5rem;font-weight:800;color:var(--accent-l)">${userPurchases.length}</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:9px;padding:1rem;text-align:center">
+          <div style="font-size:.7rem;color:var(--text3);margin-bottom:.3rem">خرید موفق</div>
+          <div style="font-size:1.5rem;font-weight:800;color:var(--success)">${paid.length}</div>
+        </div>
+      </div>
+      ${paid.map(p => `
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:9px;padding:1rem;margin-bottom:.7rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+            <span class="badge badge-${p.plan}">${p.plan === 'premium' ? 'پریمیوم' : 'پایه'}</span>
+            <span style="font-size:.82rem;color:var(--text2)">${Number(p.amount).toLocaleString('fa-IR')} تومان</span>
+          </div>
+          ${p.hardware_id ? `<div style="font-size:.72rem;color:var(--text3)">HW: <span class="mono">${p.hardware_id}</span></div>` : ''}
+          ${p.license_key ? `<div class="license-detail" style="margin-top:.5rem"><div class="key">${p.license_key}</div><button class="copy-btn" onclick="copyText('${p.license_key}')">📋 کپی</button></div>` : '<div style="font-size:.78rem;color:var(--warn);margin-top:.4rem">⏳ هنوز Hardware ID وارد نشده</div>'}
+        </div>
+      `).join('') || '<div style="text-align:center;padding:1.5rem;color:var(--text3)">خریدی ثبت نشده</div>'}
+    `;
+  } catch(e) {
+    document.getElementById('userModalContent').innerHTML = `<div style="color:var(--danger)">${e.message}</div>`;
+  }
+}
+
+// ── PURCHASES ───────────────────────────────────────────
+async function loadPurchases() {
+  document.getElementById('purchasesList').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></td></tr>';
+  try {
+    const purchases = await api('/admin/purchases');
+    document.getElementById('purchaseCount').textContent = `(${purchases.length} مورد)`;
+    document.getElementById('purchasesList').innerHTML = purchases.length
+      ? purchases.map((p, i) => `<tr>
+          <td class="mono">${i + 1}</td>
+          <td class="mono">${p.user_id}</td>
+          <td><span class="badge badge-${p.plan}">${p.plan === 'premium' ? 'پریمیوم ✦' : 'پایه'}</span></td>
+          <td>${Number(p.amount).toLocaleString('fa-IR')} ت</td>
+          <td><span class="badge badge-${p.status}">${statusText(p.status)}</span></td>
+          <td class="mono" style="font-size:.72rem">${p.hardware_id ? p.hardware_id.slice(0,16)+'...' : '—'}</td>
+          <td>${fDate(p.created_at)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="7" class="empty-state"><div class="emoji">📭</div>خریدی ثبت نشده</td></tr>';
+  } catch (e) {
+    toast('خطا: ' + e.message, 'error');
+  }
+}
+
+// ── LICENSES ───────────────────────────────────────────
+async function loadLicenses() {
+  document.getElementById('licensesList').innerHTML = '<tr><td colspan="6" style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></td></tr>';
+  try {
+    const purchases = await api('/admin/purchases');
+    const withLic = purchases.filter(p => p.license_key);
+    document.getElementById('licenseCount').textContent = `(${withLic.length} مورد)`;
+    document.getElementById('licensesList').innerHTML = withLic.length
+      ? withLic.map((p, i) => `<tr>
+          <td class="mono">${i + 1}</td>
+          <td class="mono">${p.user_id}</td>
+          <td><span class="badge badge-${p.plan}">${p.plan === 'premium' ? 'پریمیوم ✦' : 'پایه'}</span></td>
+          <td class="mono" style="font-size:.72rem">${p.hardware_id ? p.hardware_id.slice(0,16)+'...' : '—'}</td>
+          <td><span class="mono" style="font-size:.7rem">${p.license_key.slice(0,30)}...</span>
+              <button class="copy-btn" onclick="copyText('${p.license_key}')">📋</button></td>
+          <td>${fDate(p.paid_at)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="6" class="empty-state"><div class="emoji">🔑</div>لایسنسی صادر نشده</td></tr>';
+  } catch (e) {
+    toast('خطا: ' + e.message, 'error');
+  }
+}
+
+// ── MANUAL LICENSE ──────────────────────────────────────
+async function generateManual() {
+  const hwId = document.getElementById('manualHwId').value.trim();
+  const plan = document.getElementById('manualPlan').value;
+  const days = parseInt(document.getElementById('manualDays').value);
+  const btn  = document.getElementById('genBtn');
+
+  if (!hwId) { toast('Hardware ID را وارد کنید', 'error'); return; }
+
+  btn.innerHTML = '<span class="spinner"></span> در حال صدور...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(API + '/admin/generate-license', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'X-Admin-Key': ADMIN_KEY },
+      body: JSON.stringify({ hardware_id: hwId, plan, days })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail);
+
+    document.getElementById('manualLicenseKey').textContent = data.license_key;
+    document.getElementById('manualResult').style.display = 'block';
+    toast('✅ لایسنس با موفقیت صادر شد!', 'success');
+  } catch (e) {
+    toast('خطا: ' + e.message, 'error');
+  } finally {
+    btn.innerHTML = '✨ صدور لایسنس';
+    btn.disabled = false;
+  }
+}
+
+// ── HELPERS ─────────────────────────────────────────────
+function fDate(d) {
+  if (!d) return '—';
+  try { return new Date(d).toLocaleDateString('fa-IR'); } catch { return d; }
+}
+
+function statusText(s) {
+  return { paid:'✓ موفق', pending:'در انتظار', failed:'ناموفق' }[s] || s;
+}
+
+function filterTable(tableId, q) {
+  const rows = document.getElementById(tableId).querySelectorAll('tbody tr');
+  rows.forEach(r => {
+    r.style.display = r.textContent.includes(q) ? '' : 'none';
+  });
+}
+
+function copyText(t) {
+  navigator.clipboard.writeText(t).then(() => toast('✅ کپی شد!', 'success'));
+}
+
+function closeModal(id)             { document.getElementById(id).classList.remove('show') }
+function closeOverlay(e, id)        { if (e.target.id === id) closeModal(id) }
+
+function toast(msg, type = '', dur = 3500) {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toastWrap').appendChild(el);
+  setTimeout(() => el.remove(), dur);
+}
+</script>
+</body>
+</html>
