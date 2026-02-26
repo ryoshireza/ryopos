@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RYOPOS | نرم‌افزار مدیریت کافه</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-deep: #050810;
+    --bg-dark: #080d1a;
+    --bg-card: rgba(255,255,255,0.04);
+    --bg-card-hover: rgba(255,255,255,0.07);
+    --glass-border: rgba(255,255,255,0.08);
+    --glass-border-hover: rgba(255,255,255,0.18);
+    --accent: #c8832a;
+    --accent-light: #e8a84a;
+    --accent-glow: rgba(200,131,42,0.3);
+    --accent2: #1e6fa8;
+    --text-primary: #f0ece4;
+    --text-secondary: #9a9485;
+    --text-muted: #5a5650;
+    --gradient-hero: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(200,131,42,0.18) 0%, transparent 70%);
+    --gradient-glow: radial-gradient(ellipse 40% 40% at 70% 30%, rgba(30,111,168,0.12) 0%, transparent 60%);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    font-family: 'Vazirmatn', sans-serif;
+    background: var(--bg-deep);
+    color: var(--text-primary);
+    overflow-x: hidden;
+    line-height: 1.7;
+  }
+
+  /* ── Animated Background ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background:
+      var(--gradient-hero),
+      var(--gradient-glow),
+      radial-gradient(ellipse 60% 50% at 20% 80%, rgba(200,131,42,0.07) 0%, transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* Noise texture overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+    opacity: 0.4;
+  }
+
+  /* ── Grid Lines Background ── */
+  .grid-bg {
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 60px 60px;
+    z-index: 0;
+    pointer-events: none;
+    mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 100%);
+  }
+
+  /* ── Navbar ── */
+  nav {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    padding: 0 5%;
+    height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(5,8,16,0.7);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--glass-border);
+    transition: all 0.3s;
+  }
+
+  .nav-logo {
+    font-size: 1.6rem;
+    font-weight: 900;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, var(--accent-light), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    text-decoration: none;
+    position: relative;
+  }
+  .nav-logo span {
+    font-weight: 300;
+    font-size: 0.75rem;
+    letter-spacing: 4px;
+    display: block;
+    -webkit-text-fill-color: var(--text-muted);
+    color: var(--text-muted);
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+    align-items: center;
+  }
+  .nav-links a {
+    color: var(--text-secondary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: color 0.2s;
+    position: relative;
+  }
+  .nav-links a::after {
+    content: '';
+    position: absolute;
+    bottom: -4px; right: 0;
+    width: 0; height: 1px;
+    background: var(--accent);
+    transition: width 0.3s;
+  }
+  .nav-links a:hover { color: var(--text-primary); }
+  .nav-links a:hover::after { width: 100%; }
+
+  .nav-cta {
+    background: linear-gradient(135deg, var(--accent), #a06520);
+    color: #fff !important;
+    padding: 0.5rem 1.4rem;
+    border-radius: 6px;
+    font-weight: 600 !important;
+    transition: all 0.3s !important;
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+  .nav-cta:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 30px var(--accent-glow) !important;
+  }
+  .nav-cta::after { display: none !important; }
+
+  /* ── Hero Section ── */
+  .hero {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 100px 5% 60px;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(200,131,42,0.1);
+    border: 1px solid rgba(200,131,42,0.3);
+    border-radius: 100px;
+    padding: 0.4rem 1.2rem;
+    font-size: 0.82rem;
+    color: var(--accent-light);
+    margin-bottom: 2rem;
+    animation: fadeDown 0.8s ease both;
+  }
+  .hero-badge::before {
+    content: '☕';
+    font-size: 1rem;
+  }
+
+  .hero h1 {
+    font-size: clamp(3rem, 8vw, 7rem);
+    font-weight: 900;
+    letter-spacing: -1px;
+    line-height: 1.05;
+    margin-bottom: 1.5rem;
+    animation: fadeDown 0.8s 0.1s ease both;
+  }
+  .hero h1 .brand {
+    background: linear-gradient(135deg, #fff 20%, var(--accent-light) 60%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    display: block;
+  }
+  .hero h1 .sub {
+    font-size: 0.38em;
+    font-weight: 400;
+    color: var(--text-secondary);
+    -webkit-text-fill-color: var(--text-secondary);
+    letter-spacing: 0.5px;
+    display: block;
+    margin-top: 0.3em;
+  }
+
+  .hero-desc {
+    font-size: 1.15rem;
+    color: var(--text-secondary);
+    max-width: 580px;
+    margin: 0 auto 3rem;
+    font-weight: 300;
+    animation: fadeDown 0.8s 0.2s ease both;
+  }
+
+  .hero-buttons {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    animation: fadeDown 0.8s 0.3s ease both;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), #a06520);
+    color: #fff;
+    padding: 0.9rem 2.4rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 700;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.3s;
+    box-shadow: 0 0 30px var(--accent-glow), 0 4px 15px rgba(0,0,0,0.3);
+    font-family: 'Vazirmatn', sans-serif;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 50px var(--accent-glow), 0 8px 25px rgba(0,0,0,0.4);
+  }
+
+  .btn-ghost {
+    background: var(--bg-card);
+    color: var(--text-primary);
+    padding: 0.9rem 2.4rem;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 500;
+    text-decoration: none;
+    border: 1px solid var(--glass-border);
+    cursor: pointer;
+    transition: all 0.3s;
+    backdrop-filter: blur(10px);
+    font-family: 'Vazirmatn', sans-serif;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+  }
+  .btn-ghost:hover {
+    background: var(--bg-card-hover);
+    border-color: var(--glass-border-hover);
+    transform: translateY(-2px);
+  }
+
+  /* Floating mockup */
+  .hero-mockup {
+    margin-top: 5rem;
+    position: relative;
+    animation: fadeUp 1s 0.4s ease both;
+    width: 100%;
+    max-width: 900px;
+  }
+  .mockup-frame {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 1px;
+    backdrop-filter: blur(20px);
+    box-shadow:
+      0 0 0 1px rgba(255,255,255,0.05),
+      0 30px 80px rgba(0,0,0,0.6),
+      0 0 100px rgba(200,131,42,0.1);
+    overflow: hidden;
+  }
+  .mockup-bar {
+    background: rgba(255,255,255,0.04);
+    border-bottom: 1px solid var(--glass-border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .mockup-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+  }
+  .mockup-dot:nth-child(1) { background: #ff5f57; }
+  .mockup-dot:nth-child(2) { background: #febc2e; }
+  .mockup-dot:nth-child(3) { background: #28c840; }
+
+  .mockup-content {
+    padding: 2rem;
+    display: grid;
+    grid-template-columns: 200px 1fr 180px;
+    gap: 1rem;
+    min-height: 280px;
+    direction: rtl;
+  }
+
+  .mock-sidebar {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .mock-item {
+    height: 32px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.04);
+    display: flex;
+    align-items: center;
+    padding: 0 0.8rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    gap: 0.5rem;
+  }
+  .mock-item.active {
+    background: rgba(200,131,42,0.15);
+    border: 1px solid rgba(200,131,42,0.25);
+    color: var(--accent-light);
+  }
+
+  .mock-main { display: flex; flex-direction: column; gap: 0.8rem; }
+  .mock-header {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.85rem;
+  }
+  .mock-title { font-weight: 700; font-size: 1rem; color: var(--text-primary); }
+  .mock-stat {
+    background: rgba(200,131,42,0.12);
+    border: 1px solid rgba(200,131,42,0.2);
+    border-radius: 6px;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.75rem;
+    color: var(--accent-light);
+  }
+  .mock-table {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 1rem;
+    flex: 1;
+  }
+  .mock-row {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    align-items: center;
+  }
+  .mock-cell {
+    height: 22px;
+    border-radius: 4px;
+    background: rgba(255,255,255,0.04);
+  }
+
+  .mock-panel {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+  .mock-panel-title {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-bottom: 0.3rem;
+  }
+  .mock-price {
+    font-size: 1.5rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--accent-light), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .mock-bar-item { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.05); overflow: hidden; }
+  .mock-bar-fill { height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), var(--accent-light)); }
+
+  /* ── Stats Section ── */
+  .stats-section {
+    position: relative;
+    z-index: 1;
+    padding: 4rem 5%;
+    border-top: 1px solid var(--glass-border);
+    border-bottom: 1px solid var(--glass-border);
+    background: rgba(255,255,255,0.01);
+  }
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 2px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .stat-item {
+    text-align: center;
+    padding: 2rem 1rem;
+  }
+  .stat-num {
+    font-size: 3rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, #fff, var(--accent-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin-bottom: 0.5rem;
+  }
+  .stat-label {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    font-weight: 400;
+  }
+
+  /* ── Section Base ── */
+  section {
+    position: relative;
+    z-index: 1;
+    padding: 7rem 5%;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .section-tag {
+    display: inline-block;
+    background: rgba(200,131,42,0.1);
+    border: 1px solid rgba(200,131,42,0.25);
+    color: var(--accent-light);
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 0.35rem 1rem;
+    border-radius: 100px;
+    margin-bottom: 1.2rem;
+  }
+  .section-title {
+    font-size: clamp(1.8rem, 4vw, 3rem);
+    font-weight: 800;
+    line-height: 1.2;
+    margin-bottom: 1.2rem;
+  }
+  .section-title span {
+    background: linear-gradient(135deg, var(--accent-light), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .section-desc {
+    color: var(--text-secondary);
+    font-size: 1.05rem;
+    max-width: 560px;
+    font-weight: 300;
+  }
+
+  /* ── Features ── */
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5px;
+    margin-top: 4rem;
+    background: var(--glass-border);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .feature-card {
+    background: var(--bg-dark);
+    padding: 2.5rem 2rem;
+    transition: background 0.3s;
+    position: relative;
+    overflow: hidden;
+  }
+  .feature-card::before {
+    content: '';
+    position: absolute;
+    top: 0; right: 0;
+    width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .feature-card:hover { background: rgba(200,131,42,0.04); }
+  .feature-card:hover::before { opacity: 1; }
+
+  .feature-icon {
+    width: 50px; height: 50px;
+    border-radius: 12px;
+    background: rgba(200,131,42,0.1);
+    border: 1px solid rgba(200,131,42,0.2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.4rem;
+    margin-bottom: 1.5rem;
+    transition: all 0.3s;
+  }
+  .feature-card:hover .feature-icon {
+    background: rgba(200,131,42,0.2);
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
+  .feature-card h3 {
+    font-size: 1.1rem;
+    font-weight: 700;
+    margin-bottom: 0.7rem;
+    color: var(--text-primary);
+  }
+  .feature-card p {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.8;
+  }
+
+  /* ── Pricing ── */
+  .pricing-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.5rem;
+    margin-top: 4rem;
+    max-width: 800px;
+  }
+  .price-card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    padding: 2.5rem 2rem;
+    backdrop-filter: blur(20px);
+    position: relative;
+    overflow: hidden;
+    transition: all 0.3s;
+  }
+  .price-card:hover {
+    border-color: var(--glass-border-hover);
+    transform: translateY(-4px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+  }
+  .price-card.featured {
+    border-color: rgba(200,131,42,0.4);
+    background: rgba(200,131,42,0.05);
+  }
+  .price-card.featured::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 80% 50% at 50% -20%, rgba(200,131,42,0.12) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .price-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, var(--accent), #a06520);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.25rem 0.8rem;
+    border-radius: 100px;
+    margin-bottom: 1.2rem;
+    letter-spacing: 1px;
+  }
+  .price-name {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin-bottom: 0.5rem;
+  }
+  .price-amount {
+    font-size: 2.5rem;
+    font-weight: 900;
+    background: linear-gradient(135deg, #fff, var(--accent-light));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    line-height: 1;
+    margin: 1rem 0 0.3rem;
+  }
+  .price-period {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-bottom: 2rem;
+  }
+  .price-features {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+    margin-bottom: 2rem;
+  }
+  .price-features li {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+  }
+  .price-features li::before {
+    content: '✓';
+    color: var(--accent);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  /* ── Download Section ── */
+  .download-section {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px;
+    padding: 4rem;
+    text-align: center;
+    position: relative;
+    overflow: hidden;
+    max-width: 800px;
+    margin: 4rem auto 0;
+  }
+  .download-section::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 60% at 50% 0%, rgba(200,131,42,0.1) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .download-title {
+    font-size: 2rem;
+    font-weight: 800;
+    margin-bottom: 0.8rem;
+  }
+  .download-meta {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin: 1.5rem 0 2.5rem;
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+  }
+  .download-meta span { display: flex; align-items: center; gap: 0.4rem; }
+
+  /* ── FAQ ── */
+  .faq-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    margin-top: 3rem;
+    background: var(--glass-border);
+    border: 1px solid var(--glass-border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .faq-item {
+    background: var(--bg-dark);
+    overflow: hidden;
+  }
+  .faq-question {
+    width: 100%;
+    background: none;
+    border: none;
+    text-align: right;
+    font-family: 'Vazirmatn', sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding: 1.5rem 2rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    transition: background 0.2s;
+  }
+  .faq-question:hover { background: rgba(255,255,255,0.02); }
+  .faq-arrow {
+    width: 24px; height: 24px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid var(--glass-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.75rem;
+    transition: all 0.3s;
+    flex-shrink: 0;
+    margin-right: 1rem;
+  }
+  .faq-item.open .faq-arrow {
+    background: rgba(200,131,42,0.15);
+    border-color: rgba(200,131,42,0.3);
+    transform: rotate(180deg);
+    color: var(--accent);
+  }
+  .faq-answer {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.35s ease, padding 0.35s ease;
+    padding: 0 2rem;
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.9;
+  }
+  .faq-item.open .faq-answer {
+    max-height: 300px;
+    padding: 0 2rem 1.5rem;
+  }
+
+  /* ── Footer ── */
+  footer {
+    position: relative;
+    z-index: 1;
+    border-top: 1px solid var(--glass-border);
+    padding: 4rem 5% 2rem;
+  }
+  .footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .footer-top {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 1fr;
+    gap: 4rem;
+    margin-bottom: 3rem;
+  }
+  .footer-brand-name {
+    font-size: 1.8rem;
+    font-weight: 900;
+    letter-spacing: 2px;
+    background: linear-gradient(135deg, var(--accent-light), var(--accent));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    margin-bottom: 1rem;
+  }
+  .footer-brand-desc {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+    line-height: 1.8;
+  }
+  .footer-col-title {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 1.2rem;
+  }
+  .footer-links {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.8rem;
+  }
+  .footer-links a {
+    text-decoration: none;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    transition: color 0.2s;
+  }
+  .footer-links a:hover { color: var(--accent-light); }
+
+  .footer-bottom {
+    padding-top: 2rem;
+    border-top: 1px solid var(--glass-border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.82rem;
+    color: var(--text-muted);
+  }
+
+  /* ── Animations ── */
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-20px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(40px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+
+  .hero-mockup { animation: fadeUp 1s 0.4s ease both, float 6s 1.5s ease-in-out infinite; }
+
+  /* Scroll reveal */
+  .reveal {
+    opacity: 0;
+    transform: translateY(30px);
+    transition: opacity 0.7s ease, transform 0.7s ease;
+  }
+  .reveal.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .reveal-delay-1 { transition-delay: 0.1s; }
+  .reveal-delay-2 { transition-delay: 0.2s; }
+  .reveal-delay-3 { transition-delay: 0.3s; }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .features-grid { grid-template-columns: repeat(2, 1fr); }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .footer-top { grid-template-columns: 1fr 1fr; }
+    .mockup-content { grid-template-columns: 1fr; }
+    .mock-sidebar, .mock-panel { display: none; }
+  }
+  @media (max-width: 600px) {
+    .features-grid { grid-template-columns: 1fr; }
+    .pricing-grid { grid-template-columns: 1fr; }
+    .nav-links { display: none; }
+    .download-section { padding: 2.5rem 1.5rem; }
+    .footer-top { grid-template-columns: 1fr; gap: 2rem; }
+    .hero-buttons { flex-direction: column; align-items: center; }
+  }
+
+  /* ── Coming Soon Badge ── */
+  .soon-badge {
+    display: inline-block;
+    background: rgba(30,111,168,0.15);
+    border: 1px solid rgba(30,111,168,0.3);
+    color: #6bb5e8;
+    font-size: 0.7rem;
+    padding: 0.15rem 0.6rem;
+    border-radius: 100px;
+    margin-right: 0.5rem;
+    vertical-align: middle;
+  }
+
+  /* Divider line with glow */
+  .glow-divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    border: none;
+    margin: 0;
+    opacity: 0.4;
+  }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<!-- ── Navbar ── -->
+<nav>
+  <a href="#" class="nav-logo">
+    RYOPOS
+    <span>CAFE MANAGEMENT</span>
+  </a>
+  <ul class="nav-links">
+    <li><a href="#features">امکانات</a></li>
+    <li><a href="#pricing">قیمت‌گذاری</a></li>
+    <li><a href="#download">دانلود</a></li>
+    <li><a href="#faq">سوالات</a></li>
+    <li><a href="#download" class="nav-cta">دریافت رایگان</a></li>
+  </ul>
+</nav>
+
+<!-- ── Hero ── -->
+<div class="hero">
+  <div class="hero-badge">نسخه ۲.۰ منتشر شد</div>
+  <h1>
+    <span class="brand">RYOPOS</span>
+    <span class="sub">نرم‌افزار هوشمند مدیریت کافه</span>
+  </h1>
+  <p class="hero-desc">
+    تمام عملیات کافه‌تان را در یک نرم‌افزار مدیریت کنید — از ثبت سفارش تا فروش قسطی، گزارش‌گیری تا مدیریت لایسنس آنلاین.
+  </p>
+  <div class="hero-buttons">
+    <a href="#download" class="btn-primary">⬇ دانلود رایگان</a>
+    <a href="#features" class="btn-ghost">مشاهده امکانات</a>
+  </div>
+
+  <div class="hero-mockup">
+    <div class="mockup-frame">
+      <div class="mockup-bar">
+        <div class="mockup-dot"></div>
+        <div class="mockup-dot"></div>
+        <div class="mockup-dot"></div>
+        <span style="font-size:0.75rem;color:var(--text-muted);margin-right:auto">RYOPOS v2.0 — داشبورد اصلی</span>
+      </div>
+      <div class="mockup-content">
+        <div class="mock-sidebar">
+          <div class="mock-item active">☕ داشبورد</div>
+          <div class="mock-item">🛒 سفارشات</div>
+          <div class="mock-item">📦 موجودی</div>
+          <div class="mock-item">💳 فروش قسطی</div>
+          <div class="mock-item">📊 گزارشات</div>
+          <div class="mock-item">⚙️ تنظیمات</div>
+        </div>
+        <div class="mock-main">
+          <div class="mock-header">
+            <div class="mock-title">فروش امروز</div>
+            <div class="mock-stat">↑ ۱۸٪ نسبت به دیروز</div>
+          </div>
+          <div class="mock-table">
+            <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.8rem;">آخرین تراکنش‌ها</div>
+            <div class="mock-row">
+              <div class="mock-cell" style="flex:2;background:rgba(200,131,42,0.1);"></div>
+              <div class="mock-cell" style="flex:1"></div>
+              <div class="mock-cell" style="flex:1;background:rgba(40,200,100,0.1)"></div>
+            </div>
+            <div class="mock-row">
+              <div class="mock-cell" style="flex:2"></div>
+              <div class="mock-cell" style="flex:1"></div>
+              <div class="mock-cell" style="flex:1;background:rgba(40,200,100,0.1)"></div>
+            </div>
+            <div class="mock-row">
+              <div class="mock-cell" style="flex:2;background:rgba(200,131,42,0.08)"></div>
+              <div class="mock-cell" style="flex:1"></div>
+              <div class="mock-cell" style="flex:1;background:rgba(40,200,100,0.1)"></div>
+            </div>
+            <div class="mock-row">
+              <div class="mock-cell" style="flex:2"></div>
+              <div class="mock-cell" style="flex:1"></div>
+              <div class="mock-cell" style="flex:1;background:rgba(200,131,42,0.1)"></div>
+            </div>
+          </div>
+        </div>
+        <div class="mock-panel">
+          <div class="mock-panel-title">درآمد</div>
+          <div class="mock-price">۴.۸ میلیون</div>
+          <div style="font-size:0.7rem;color:var(--text-muted);margin-bottom:0.8rem;">تومان این ماه</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.3rem;">اسپرسو</div>
+          <div class="mock-bar-item"><div class="mock-bar-fill" style="width:80%"></div></div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.3rem;margin-top:0.4rem;">لاته</div>
+          <div class="mock-bar-item"><div class="mock-bar-fill" style="width:60%"></div></div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.3rem;margin-top:0.4rem;">کاپوچینو</div>
+          <div class="mock-bar-item"><div class="mock-bar-fill" style="width:45%"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Stats ── -->
+<div class="stats-section">
+  <div class="stats-grid">
+    <div class="stat-item reveal">
+      <div class="stat-num">+۵۰۰</div>
+      <div class="stat-label">کافه فعال</div>
+    </div>
+    <div class="stat-item reveal reveal-delay-1">
+      <div class="stat-num">۹۹.۹٪</div>
+      <div class="stat-label">آپتایم سرور</div>
+    </div>
+    <div class="stat-item reveal reveal-delay-2">
+      <div class="stat-num">۲۴/۷</div>
+      <div class="stat-label">پشتیبانی آنلاین</div>
+    </div>
+    <div class="stat-item reveal reveal-delay-3">
+      <div class="stat-num">v2.0</div>
+      <div class="stat-label">آخرین نسخه</div>
+    </div>
+  </div>
+</div>
+
+<hr class="glow-divider">
+
+<!-- ── Features ── -->
+<section id="features">
+  <div class="reveal">
+    <div class="section-tag">امکانات</div>
+    <h2 class="section-title">همه چیزی که <span>کافه شما</span> نیاز دارد</h2>
+    <p class="section-desc">از مدیریت سفارشات لحظه‌ای تا گزارش‌های مالی دقیق — همه در یک نرم‌افزار یکپارچه.</p>
+  </div>
+
+  <div class="features-grid">
+    <div class="feature-card reveal">
+      <div class="feature-icon">☕</div>
+      <h3>مدیریت سفارشات</h3>
+      <p>ثبت و پیگیری سفارشات به‌صورت لحظه‌ای. پشتیبانی از سفارش‌های میز، بیرون‌بر و آنلاین.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-1">
+      <div class="feature-icon">💳</div>
+      <h3>فروش قسطی پریمیوم</h3>
+      <p>ثبت فروش قسطی با محاسبه خودکار جدول اقساط. نمایش مانده‌داران و سررسید اقساط.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-2">
+      <div class="feature-icon">📊</div>
+      <h3>گزارش‌های مالی</h3>
+      <p>گزارشات روزانه، هفتگی و ماهانه. نمودارهای بصری فروش و تحلیل بهترین محصولات.</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon">🔐</div>
+      <h3>لایسنس آنلاین امن</h3>
+      <p>سیستم لایسنس چندلایه با Hardware ID. هاردبیت ۲۴ ساعته برای امنیت بالا.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-1">
+      <div class="feature-icon">📦</div>
+      <h3>مدیریت موجودی</h3>
+      <p>کنترل دقیق موجودی مواد اولیه. هشدار کمبود موجودی و ثبت ورود کالا.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-2">
+      <div class="feature-icon">🖨️</div>
+      <h3>چاپ رسید حرفه‌ای</h3>
+      <p>رسید با فرمت‌های مختلف شامل رسید قسطی با جدول اقساط و اطلاعات کامل.</p>
+    </div>
+    <div class="feature-card reveal">
+      <div class="feature-icon">🏪</div>
+      <h3>نسخه فروشگاهی <span class="soon-badge">به‌زودی</span></h3>
+      <p>پشتیبانی از کسب‌وکارهای خرده‌فروشی با ویژگی‌های اختصاصی فروشگاه.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-1">
+      <div class="feature-icon">👥</div>
+      <h3>مدیریت کارمندان <span class="soon-badge">به‌زودی</span></h3>
+      <p>تعریف سطوح دسترسی مختلف برای کارمندان و مدیران شیفت.</p>
+    </div>
+    <div class="feature-card reveal reveal-delay-2">
+      <div class="feature-icon">📱</div>
+      <h3>اپ موبایل <span class="soon-badge">به‌زودی</span></h3>
+      <p>مشاهده آمار و مدیریت کافه از موبایل در هر مکان و هر زمان.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ── Pricing ── -->
+<section id="pricing">
+  <div class="reveal">
+    <div class="section-tag">قیمت‌گذاری</div>
+    <h2 class="section-title">یک‌بار بخرید، <span>مادام‌العمر</span> استفاده کنید</h2>
+    <p class="section-desc">بدون اشتراک ماهانه. بدون هزینه‌های پنهان. فقط یک پرداخت برای همیشه.</p>
+  </div>
+
+  <div class="pricing-grid">
+    <div class="price-card reveal">
+      <div class="price-name">پلن پایه</div>
+      <p style="color:var(--text-muted);font-size:0.88rem;margin-top:0.3rem">برای کافه‌های کوچک</p>
+      <div class="price-amount">۴۹۰,۰۰۰</div>
+      <div class="price-period">تومان — پرداخت یک‌بار</div>
+      <ul class="price-features">
+        <li>مدیریت سفارشات نامحدود</li>
+        <li>گزارشات مالی کامل</li>
+        <li>مدیریت موجودی</li>
+        <li>چاپ رسید حرفه‌ای</li>
+        <li>آپدیت‌های رایگان</li>
+        <li>پشتیبانی ۶ ماهه</li>
+      </ul>
+      <a href="#download" class="btn-ghost" style="width:100%;justify-content:center">شروع رایگان ۱۴ روزه</a>
+    </div>
+
+    <div class="price-card featured reveal reveal-delay-1">
+      <div class="price-badge">✦ پیشنهاد ویژه</div>
+      <div class="price-name">پلن پریمیوم</div>
+      <p style="color:var(--text-muted);font-size:0.88rem;margin-top:0.3rem">برای کافه‌های حرفه‌ای</p>
+      <div class="price-amount">۸۹۰,۰۰۰</div>
+      <div class="price-period">تومان — پرداخت یک‌بار</div>
+      <ul class="price-features">
+        <li>تمام امکانات پلن پایه</li>
+        <li>فروش قسطی به مشتریان</li>
+        <li>پنل مدیریت پیشرفته</li>
+        <li>گزارشات اختصاصی</li>
+        <li>پشتیبانی اولویت‌دار</li>
+        <li>آپدیت‌های مادام‌العمر</li>
+      </ul>
+      <a href="#download" class="btn-primary" style="width:100%;justify-content:center">خرید پریمیوم</a>
+    </div>
+  </div>
+</section>
+
+<!-- ── Download ── -->
+<section id="download" style="padding-bottom: 3rem;">
+  <div class="reveal">
+    <div class="section-tag">دانلود</div>
+    <h2 class="section-title">همین الان <span>رایگان</span> امتحان کنید</h2>
+    <p class="section-desc">۱۴ روز دسترسی کامل به تمام امکانات — بدون نیاز به کارت بانکی.</p>
+  </div>
+
+  <div class="download-section reveal">
+    <div style="font-size:4rem;margin-bottom:1rem">⬇</div>
+    <h3 class="download-title">دانلود RYOPOS v2.0</h3>
+    <p style="color:var(--text-secondary);font-size:0.95rem">نسخه آزمایشی ۱۴ روزه — بدون محدودیت</p>
+    <div class="download-meta">
+      <span>🪟 ویندوز ۱۰ و ۱۱</span>
+      <span>💾 حجم: ۴۸ مگابایت</span>
+      <span>🔒 بدون نیاز به اینترنت دائمی</span>
+    </div>
+    <div style="display:flex;gap:1rem;justify-content:center;flex-wrap:wrap">
+      <a href="#" class="btn-primary" onclick="alert('لینک دانلود به‌زودی فعال می‌شود')">⬇ دانلود نسخه ۳۲ بیتی</a>
+      <a href="#" class="btn-ghost" onclick="alert('لینک دانلود به‌زودی فعال می‌شود')">⬇ دانلود نسخه ۶۴ بیتی</a>
+    </div>
+    <p style="color:var(--text-muted);font-size:0.78rem;margin-top:1.5rem">آخرین آپدیت: بهمن ۱۴۰۳ — بدون ویروس (آنتی‌ویروس VirusTotal تأیید شده)</p>
+  </div>
+</section>
+
+<!-- ── FAQ ── -->
+<section id="faq">
+  <div class="reveal">
+    <div class="section-tag">سوالات متداول</div>
+    <h2 class="section-title">سوالی <span>دارید؟</span></h2>
+  </div>
+
+  <div class="faq-list reveal">
+    <div class="faq-item">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        آیا برای استفاده از نرم‌افزار اینترنت لازم است؟
+        <span class="faq-arrow">▾</span>
+      </button>
+      <div class="faq-answer">خیر. نرم‌افزار به‌صورت آفلاین کار می‌کند. اتصال به اینترنت فقط برای فعال‌سازی لایسنس در ابتدا و همچنین ارسال هاردبیت ۲۴ ساعته جهت تأیید لایسنس نیاز است. عملیات روزمره کافه کاملاً آفلاین انجام می‌شود.</div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        آیا می‌توانم نرم‌افزار را روی چند سیستم نصب کنم؟
+        <span class="faq-arrow">▾</span>
+      </button>
+      <div class="faq-answer">هر لایسنس به یک سیستم خاص (Hardware ID) گره می‌خورد. در صورت نیاز به نصب روی سیستم جدید، می‌توانید از طریق پشتیبانی انتقال لایسنس انجام دهید.</div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        فروش قسطی دقیقاً چطور کار می‌کند؟
+        <span class="faq-arrow">▾</span>
+      </button>
+      <div class="faq-answer">در پلن پریمیوم، هنگام ثبت فروش می‌توانید گزینه قسطی را انتخاب کنید. سیستم به‌صورت خودکار جدول اقساط با تاریخ سررسید هر قسط می‌سازد و رسید قسطی چاپ می‌شود. اقساط سررسیدگذشته در پنل مانده‌داران با رنگ قرمز نمایش داده می‌شوند.</div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        آیا آپدیت‌های بعدی رایگان است؟
+        <span class="faq-arrow">▾</span>
+      </button>
+      <div class="faq-answer">بله. هر دو پلن شامل آپدیت‌های رایگان می‌شوند. پلن پریمیوم آپدیت‌های مادام‌العمر دارد و پلن پایه آپدیت‌های ۶ ماهه.</div>
+    </div>
+    <div class="faq-item">
+      <button class="faq-question" onclick="toggleFaq(this)">
+        روش پرداخت چیست؟
+        <span class="faq-arrow">▾</span>
+      </button>
+      <div class="faq-answer">پرداخت از طریق درگاه امن زرین‌پال انجام می‌شود و تمام کارت‌های عضو شتاب پذیرفته می‌شوند. پس از پرداخت موفق، لایسنس به‌صورت فوری صادر می‌شود.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Footer ── -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-top">
+      <div>
+        <div class="footer-brand-name">RYOPOS</div>
+        <p class="footer-brand-desc">نرم‌افزار هوشمند مدیریت کافه — طراحی شده برای کسب‌وکارهای ایرانی با تمرکز بر سادگی و قدرت.</p>
+        <p style="color:var(--text-muted);font-size:0.8rem;margin-top:1.2rem">📞 ۰۹۳۹۰۱۳۸۴۵۴</p>
+      </div>
+      <div>
+        <div class="footer-col-title">نرم‌افزار</div>
+        <ul class="footer-links">
+          <li><a href="#features">امکانات</a></li>
+          <li><a href="#pricing">قیمت‌گذاری</a></li>
+          <li><a href="#download">دانلود</a></li>
+          <li><a href="#">راهنمای نصب</a></li>
+          <li><a href="#">تغییرات نسخه</a></li>
+        </ul>
+      </div>
+      <div>
+        <div class="footer-col-title">پشتیبانی</div>
+        <ul class="footer-links">
+          <li><a href="#faq">سوالات متداول</a></li>
+          <li><a href="#">تماس با ما</a></li>
+          <li><a href="#">فعال‌سازی لایسنس</a></li>
+          <li><a href="#">گزارش مشکل</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <span>© ۱۴۰۳ RYOPOS — تمام حقوق محفوظ است.</span>
+      <span>ساخته شده با ☕ در ایران</span>
+    </div>
+  </div>
+</footer>
+
+<script>
+  // Scroll reveal
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(el => {
+      if (el.isIntersecting) {
+        el.target.classList.add('visible');
+      }
+    });
+  }, { threshold: 0.1, rootMargin: '0px 0px -60px 0px' });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // FAQ toggle
+  function toggleFaq(btn) {
+    const item = btn.closest('.faq-item');
+    const isOpen = item.classList.contains('open');
+    document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
+    if (!isOpen) item.classList.add('open');
+  }
+
+  // Navbar scroll effect
+  const nav = document.querySelector('nav');
+  window.addEventListener('scroll', () => {
+    if (window.scrollY > 50) {
+      nav.style.background = 'rgba(5,8,16,0.95)';
+    } else {
+      nav.style.background = 'rgba(5,8,16,0.7)';
+    }
+  });
+</script>
+</body>
+</html>
