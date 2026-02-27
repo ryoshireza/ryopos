@@ -251,6 +251,10 @@ select option { background:#0d1225 }
       <div class="page-sub">برای کاربران خاص بدون پرداخت آنلاین لایسنس صادر کن</div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:2rem;max-width:500px">
         <div class="form-group">
+          <label>ایمیل کاربر (در سایت ثبت‌نام کرده باشد)</label>
+          <input type="email" id="manualEmail" placeholder="customer@email.com">
+        </div>
+        <div class="form-group">
           <label>Hardware ID کاربر</label>
           <input type="text" id="manualHwId" placeholder="A1B2C3D4E5F6A7B8C9D0E1F2A3B4C5D6">
         </div>
@@ -292,7 +296,8 @@ select option { background:#0d1225 }
 <script>
 // ── CONFIG ──────────────────────────────────────────────
 const API       = 'https://ryopos-server-production.up.railway.app';
-const ADMIN_KEY = 'Re48654172281';
+const ADMIN_KEY = 'change-admin-key-!!!'; // ← با ADMIN_KEY سرورت عوض کن
+
 // ── LOGIN ───────────────────────────────────────────────
 function doAdminLogin() {
   const pass = document.getElementById('adminPass').value;
@@ -472,12 +477,14 @@ async function loadLicenses() {
 
 // ── MANUAL LICENSE ──────────────────────────────────────
 async function generateManual() {
-  const hwId = document.getElementById('manualHwId').value.trim();
-  const plan = document.getElementById('manualPlan').value;
-  const days = parseInt(document.getElementById('manualDays').value);
-  const btn  = document.getElementById('genBtn');
+  const email = document.getElementById('manualEmail').value.trim();
+  const hwId  = document.getElementById('manualHwId').value.trim();
+  const plan  = document.getElementById('manualPlan').value;
+  const days  = parseInt(document.getElementById('manualDays').value);
+  const btn   = document.getElementById('genBtn');
 
-  if (!hwId) { toast('Hardware ID را وارد کنید', 'error'); return; }
+  if (!email) { toast('ایمیل کاربر را وارد کنید', 'error'); return; }
+  if (!hwId)  { toast('Hardware ID را وارد کنید', 'error'); return; }
 
   btn.innerHTML = '<span class="spinner"></span> در حال صدور...';
   btn.disabled = true;
@@ -486,14 +493,14 @@ async function generateManual() {
     const res = await fetch(API + '/admin/generate-license', {
       method: 'POST',
       headers: { 'Content-Type':'application/json', 'X-Admin-Key': ADMIN_KEY },
-      body: JSON.stringify({ hardware_id: hwId, plan, days })
+      body: JSON.stringify({ hardware_id: hwId, plan, days, user_email: email })
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail);
 
     document.getElementById('manualLicenseKey').textContent = data.license_key;
     document.getElementById('manualResult').style.display = 'block';
-    toast('✅ لایسنس با موفقیت صادر شد!', 'success');
+    toast('✅ لایسنس صادر شد و به داشبورد کاربر اضافه شد!', 'success');
   } catch (e) {
     toast('خطا: ' + e.message, 'error');
   } finally {
