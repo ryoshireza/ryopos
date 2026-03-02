@@ -9,11 +9,11 @@ from cryptography.fernet import Fernet
 import uvicorn
 
 SECRET_KEY        = os.getenv("SECRET_KEY",        "ryopos-secret-2024-commercial-key-xyz")
-JWT_SECRET        = os.getenv("JWT_SECRET",        "change-this-jwt-secret-!!!")
-ADMIN_KEY         = os.getenv("ADMIN_KEY",         "change-admin-key-!!!")
+JWT_SECRET        = os.getenv("JWT_SECRET",        "hj72kLmN9xQpRs4vWz8yBcDeFgAiJk3n")
+ADMIN_KEY         = os.getenv("ADMIN_KEY",         "Re48654172281")
 ZARINPAL_MERCHANT = os.getenv("ZARINPAL_MERCHANT", "your-merchant-id-here")
-CALLBACK_URL      = os.getenv("CALLBACK_URL",      "https://your-server.railway.app/payment/verify")
-FRONTEND_URL      = os.getenv("FRONTEND_URL",      "https://yourusername.github.io/ryopos-website")
+CALLBACK_URL      = os.getenv("CALLBACK_URL",      "https://ryoshireza.github.io/Ryopos/")
+FRONTEND_URL      = os.getenv("FRONTEND_URL",      "https://ryoshireza.github.io/Ryopos/")
 DB_PATH           = os.getenv("DB_PATH",           "ryopos.db")
 
 PRICES = {"basic": 5000000, "premium": 7000000}
