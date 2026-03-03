@@ -87,6 +87,17 @@ label{display:block;font-size:.78rem;font-weight:700;color:var(--text2);margin-b
 input,select{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:.7rem 1rem;font-size:.9rem;font-family:'Vazirmatn',sans-serif;color:var(--text);outline:none;transition:border .2s}
 input:focus,select:focus{border-color:rgba(200,131,42,.5)}
 select option{background:#0d1225}
+textarea{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:.7rem 1rem;font-size:.9rem;font-family:'Vazirmatn',sans-serif;color:var(--text);outline:none;transition:border .2s;resize:vertical;min-height:100px}
+textarea:focus{border-color:rgba(200,131,42,.5)}
+.ann-card{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;margin-bottom:.8rem;display:flex;justify-content:space-between;align-items:flex-start;gap:1rem}
+.ann-card-body{flex:1}
+.ann-title{font-weight:700;margin-bottom:.3rem}
+.ann-text{font-size:.85rem;color:var(--text2);line-height:1.6}
+.ann-link{font-size:.75rem;color:var(--accent);margin-top:.3rem}
+.ann-date{font-size:.72rem;color:var(--text3);margin-top:.3rem}
+.update-card{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;margin-bottom:.8rem}
+.update-latest{border-color:rgba(200,131,42,.4);background:rgba(200,131,42,.05)}
+progress-bar-wrap{background:rgba(255,255,255,.08);border-radius:100px;height:6px;margin-top:.5rem;overflow:hidden}
 .toast-wrap{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);z-index:500;display:flex;flex-direction:column;gap:.5rem;align-items:center;pointer-events:none}
 .toast{background:rgba(20,25,45,.97);border:1px solid var(--border-h);border-radius:9px;padding:.65rem 1.3rem;font-size:.85rem;color:var(--text);display:flex;align-items:center;gap:.5rem;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:toastIn .3s ease;white-space:nowrap}
 .toast.success{border-color:rgba(46,204,113,.35);color:var(--success)}
@@ -126,6 +137,8 @@ select option{background:#0d1225}
       <div class="nav-item" onclick="showPage('purchases',this)"><span class="icon">💳</span> خریدها</div>
       <div class="nav-item" onclick="showPage('licenses',this)"><span class="icon">🔑</span> لایسنس‌ها</div>
       <div class="nav-item" onclick="showPage('makeLicense',this)"><span class="icon">✨</span> صدور دستی</div>
+      <div class="nav-item" onclick="showPage('announcements',this)"><span class="icon">📢</span> پیام‌ها</div>
+      <div class="nav-item" onclick="showPage('updates',this)"><span class="icon">🚀</span> آپدیت برنامه</div>
     </nav>
     <div class="sidebar-footer"><button onclick="adminLogout()">خروج از پنل</button></div>
   </aside>
@@ -229,6 +242,58 @@ select option{background:#0d1225}
       </div>
     </div>
 
+
+    <!-- ANNOUNCEMENTS -->
+    <div class="page" id="page-announcements">
+      <div class="page-title">پیام‌های سازنده</div>
+      <div class="page-sub">پیام‌هایی که در هدر برنامه نمایش داده میشن</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start">
+        <div>
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem">
+            <div style="font-size:1rem;font-weight:700;margin-bottom:1rem">📢 پیام جدید</div>
+            <div class="form-group"><label>عنوان</label><input type="text" id="annTitle" placeholder="عنوان پیام..."></div>
+            <div class="form-group"><label>متن پیام (از ایموجی هم میتونی استفاده کنی)</label><textarea id="annBody" placeholder="متن پیام خود را اینجا بنویسید... 🎉"></textarea></div>
+            <div class="form-group"><label>لینک (اختیاری)</label><input type="url" id="annLink" placeholder="https://..."></div>
+            <button class="btn btn-gold" onclick="sendAnnouncement()" id="annBtn">📢 ارسال پیام</button>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:1rem;font-weight:700;margin-bottom:1rem">پیام‌های فعال <span id="annCount" style="color:var(--text3);font-weight:400;font-size:.85rem"></span></div>
+          <div id="annList"><div style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- UPDATES -->
+    <div class="page" id="page-updates">
+      <div class="page-title">آپدیت برنامه</div>
+      <div class="page-sub">فایل آپدیت جدید آپلود کن — برنامه خودکار اطلاع میده</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:2rem;align-items:start">
+        <div>
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1.5rem">
+            <div style="font-size:1rem;font-weight:700;margin-bottom:1rem">🚀 آپلود نسخه جدید</div>
+            <div class="form-group"><label>شماره نسخه</label><input type="text" id="upVersion" placeholder="2.1.0"></div>
+            <div class="form-group"><label>توضیحات تغییرات</label><textarea id="upDesc" placeholder="در این نسخه چه تغییراتی اعمال شده..."></textarea></div>
+            <div class="form-group">
+              <label>فایل برنامه (.exe یا .zip)</label>
+              <input type="file" id="upFile" accept=".exe,.zip,.msi" style="padding:.5rem">
+            </div>
+            <div id="upProgress" style="display:none;margin-bottom:1rem">
+              <div style="font-size:.8rem;color:var(--text2);margin-bottom:.3rem">در حال آپلود...</div>
+              <div style="background:rgba(255,255,255,.08);border-radius:100px;height:8px;overflow:hidden">
+                <div id="upProgressBar" style="height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-l));width:0%;transition:width .3s;border-radius:100px"></div>
+              </div>
+            </div>
+            <button class="btn btn-gold" onclick="uploadUpdate()" id="upBtn">🚀 آپلود آپدیت</button>
+          </div>
+        </div>
+        <div>
+          <div style="font-size:1rem;font-weight:700;margin-bottom:1rem">تاریخچه نسخه‌ها</div>
+          <div id="updateList"><div style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></div></div>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -275,10 +340,12 @@ function showPage(name, el) {
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + name).classList.add('active');
   el.classList.add('active');
-  if (name==='dashboard')  loadDashboard();
-  if (name==='users')      loadUsers();
-  if (name==='purchases')  loadPurchases();
-  if (name==='licenses')   loadLicenses();
+  if (name==='dashboard')     loadDashboard();
+  if (name==='users')         loadUsers();
+  if (name==='purchases')     loadPurchases();
+  if (name==='licenses')      loadLicenses();
+  if (name==='announcements') loadAnnouncements();
+  if (name==='updates')       loadUpdates();
 }
 
 async function loadDashboard() {
@@ -455,6 +522,129 @@ function toast(msg, type='', dur=3500) {
   el.textContent = msg;
   document.getElementById('toastWrap').appendChild(el);
   setTimeout(()=>el.remove(), dur);
+}
+
+// ── ANNOUNCEMENTS ────────────────────────────────────────────
+async function sendAnnouncement() {
+  const title = document.getElementById('annTitle').value.trim();
+  const body  = document.getElementById('annBody').value.trim();
+  const link  = document.getElementById('annLink').value.trim();
+  const btn   = document.getElementById('annBtn');
+  if (!title || !body) { toast('عنوان و متن را وارد کنید', 'error'); return; }
+  btn.innerHTML = '<span class="spinner"></span> در حال ارسال...';
+  btn.disabled = true;
+  try {
+    const res = await fetch(API + '/admin/announcement', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'X-Admin-Key': ADMIN_KEY },
+      body: JSON.stringify({ title, body, link })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail);
+    document.getElementById('annTitle').value = '';
+    document.getElementById('annBody').value = '';
+    document.getElementById('annLink').value = '';
+    toast('📢 پیام با موفقیت ارسال شد!', 'success');
+    loadAnnouncements();
+  } catch(e) { toast('خطا: '+e.message,'error');
+  } finally { btn.innerHTML='📢 ارسال پیام'; btn.disabled=false; }
+}
+
+async function loadAnnouncements() {
+  document.getElementById('annList').innerHTML = '<div style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></div>';
+  try {
+    const anns = await api('/admin/announcements');
+    document.getElementById('annCount').textContent = `(${anns.length} پیام)`;
+    document.getElementById('annList').innerHTML = anns.length
+      ? anns.map(a => `
+        <div class="ann-card">
+          <div class="ann-card-body">
+            <div class="ann-title">${a.title}</div>
+            <div class="ann-text">${a.body}</div>
+            ${a.link ? `<div class="ann-link"><a href="${a.link}" target="_blank" style="color:var(--accent)">${a.link}</a></div>` : ''}
+            <div class="ann-date">${fDate(a.created_at)}</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="deleteAnnouncement(${a.id})">🗑️</button>
+        </div>`).join('')
+      : '<div style="text-align:center;padding:2rem;color:var(--text3)">پیامی ثبت نشده</div>';
+  } catch(e) { toast('خطا: '+e.message,'error'); }
+}
+
+async function deleteAnnouncement(id) {
+  if (!confirm('حذف شود؟')) return;
+  try {
+    const res = await fetch(API + '/admin/announcement/' + id, {
+      method: 'DELETE',
+      headers: { 'X-Admin-Key': ADMIN_KEY }
+    });
+    if (!res.ok) throw new Error('خطا');
+    toast('حذف شد', 'success');
+    loadAnnouncements();
+  } catch(e) { toast('خطا: '+e.message,'error'); }
+}
+
+// ── UPDATES ──────────────────────────────────────────────────
+async function uploadUpdate() {
+  const version = document.getElementById('upVersion').value.trim();
+  const desc    = document.getElementById('upDesc').value.trim();
+  const file    = document.getElementById('upFile').files[0];
+  const btn     = document.getElementById('upBtn');
+  if (!version || !desc) { toast('نسخه و توضیحات را وارد کنید', 'error'); return; }
+  if (!file) { toast('فایل را انتخاب کنید', 'error'); return; }
+
+  const formData = new FormData();
+  formData.append('version', version);
+  formData.append('description', desc);
+  formData.append('file', file);
+
+  btn.innerHTML = '<span class="spinner"></span> در حال آپلود...';
+  btn.disabled = true;
+  document.getElementById('upProgress').style.display = 'block';
+
+  try {
+    const xhr = new XMLHttpRequest();
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round(e.loaded / e.total * 100);
+        document.getElementById('upProgressBar').style.width = pct + '%';
+      }
+    };
+    await new Promise((resolve, reject) => {
+      xhr.open('POST', API + '/admin/upload-update');
+      xhr.setRequestHeader('X-Admin-Key', ADMIN_KEY);
+      xhr.onload = () => xhr.status < 400 ? resolve(JSON.parse(xhr.responseText)) : reject(new Error(JSON.parse(xhr.responseText).detail));
+      xhr.onerror = () => reject(new Error('خطای شبکه'));
+      xhr.send(formData);
+    });
+    document.getElementById('upVersion').value = '';
+    document.getElementById('upDesc').value = '';
+    document.getElementById('upFile').value = '';
+    toast('🚀 آپدیت با موفقیت آپلود شد!', 'success');
+    loadUpdates();
+  } catch(e) { toast('خطا: '+e.message,'error');
+  } finally {
+    btn.innerHTML='🚀 آپلود آپدیت'; btn.disabled=false;
+    document.getElementById('upProgress').style.display='none';
+    document.getElementById('upProgressBar').style.width='0%';
+  }
+}
+
+async function loadUpdates() {
+  document.getElementById('updateList').innerHTML = '<div style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></div>';
+  try {
+    const updates = await api('/admin/updates');
+    document.getElementById('updateList').innerHTML = updates.length
+      ? updates.map(u => `
+        <div class="update-card ${u.is_latest?'update-latest':''}">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+            <div style="font-weight:800;font-size:1.1rem">v${u.version} ${u.is_latest?'<span style="font-size:.7rem;color:var(--accent);font-weight:600;border:1px solid var(--accent);border-radius:100px;padding:.1rem .5rem">جاری</span>':''}</div>
+            <div style="font-size:.75rem;color:var(--text3)">${fDate(u.created_at)}</div>
+          </div>
+          <div style="font-size:.85rem;color:var(--text2);margin-bottom:.5rem">${u.description}</div>
+          <div style="font-size:.72rem;color:var(--text3)">📦 ${(u.filesize/1024/1024).toFixed(2)} MB — ${u.filename}</div>
+        </div>`).join('')
+      : '<div style="text-align:center;padding:2rem;color:var(--text3)">هنوز آپدیتی آپلود نشده</div>';
+  } catch(e) { toast('خطا: '+e.message,'error'); }
 }
 </script>
 </body>
