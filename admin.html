@@ -1,443 +1,461 @@
-from fastapi import FastAPI, HTTPException, Depends, Header
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse
-from contextlib import asynccontextmanager
-from pydantic import BaseModel
-from datetime import datetime, timedelta
-import aiosqlite, hashlib, hmac, secrets, httpx, json, os, base64
-from cryptography.fernet import Fernet
-import uvicorn
-
-SECRET_KEY        = os.getenv("SECRET_KEY",        "ryopos-secret-2024-commercial-key-xyz")
-JWT_SECRET        = os.getenv("JWT_SECRET",        "hj72kLmN9xQpRs4vWz8yBcDeFgAiJk3n")
-ADMIN_KEY         = os.getenv("ADMIN_KEY",         "Re48654172281")
-ZARINPAL_MERCHANT = os.getenv("ZARINPAL_MERCHANT", "your-merchant-id-here")
-CALLBACK_URL      = os.getenv("CALLBACK_URL",      "https://ryoshireza.github.io/Ryopos/")
-FRONTEND_URL      = os.getenv("FRONTEND_URL",      "https://ryoshireza.github.io/Ryopos/")
-DB_PATH           = os.getenv("DB_PATH",           "/app/data/ryopos.db")
-
-PRICES = {"basic": 5000000, "premium": 7000000}
-ZARINPAL_REQUEST = "https://api.zarinpal.com/pg/v4/payment/request.json"
-ZARINPAL_VERIFY  = "https://api.zarinpal.com/pg/v4/payment/verify.json"
-ZARINPAL_PAY     = "https://www.zarinpal.com/pg/StartPay/"
-
-
-def _get_fernet():
-    key = hashlib.sha256(SECRET_KEY.encode()).digest()
-    return Fernet(base64.urlsafe_b64encode(key))
-
-
-def generate_license_key(hardware_id: str, days: int = 36500) -> str:
-    # فرمت خوانا: RYO-XXXX-XXXX-XXXX
-    part1 = secrets.token_hex(2).upper()
-    part2 = secrets.token_hex(2).upper()
-    part3 = secrets.token_hex(2).upper()
-    return f"RYO-{part1}-{part2}-{part3}"
-
-
-def make_token(user_id: int) -> str:
-    raw = f"{user_id}:{secrets.token_hex(16)}"
-    sig = hmac.new(JWT_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
-    return base64.urlsafe_b64encode(f"{raw}:{sig}".encode()).decode()
-
-
-def verify_token(token: str) -> int:
-    try:
-        decoded = base64.urlsafe_b64decode(token.encode()).decode()
-        parts = decoded.rsplit(":", 1)
-        raw, sig = parts[0], parts[1]
-        expected = hmac.new(JWT_SECRET.encode(), raw.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(sig, expected):
-            raise ValueError
-        return int(raw.split(":")[0])
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
-
-
-async def get_current_user(authorization: str = Header(None)):
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not logged in")
-    return verify_token(authorization[7:])
-
-
-def verify_admin(x_admin_key: str = Header(None)):
-    if x_admin_key != ADMIN_KEY:
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
-
-async def init_db():
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.executescript("""
-            CREATE TABLE IF NOT EXISTS users (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                fullname      TEXT NOT NULL,
-                phone         TEXT UNIQUE NOT NULL,
-                email         TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                created_at    TEXT NOT NULL
-            );
-            CREATE TABLE IF NOT EXISTS purchases (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id       INTEGER NOT NULL,
-                plan          TEXT NOT NULL,
-                amount        INTEGER NOT NULL,
-                hardware_id   TEXT,
-                license_key   TEXT,
-                authority     TEXT UNIQUE,
-                ref_id        TEXT,
-                status        TEXT DEFAULT 'pending',
-                created_at    TEXT NOT NULL,
-                paid_at       TEXT
-            );
-            CREATE TABLE IF NOT EXISTS trial_devices (
-                hardware_id TEXT PRIMARY KEY,
-                created_at  TEXT NOT NULL
-            );
-        """)
-        await db.commit()
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    await init_db()
-    yield
-
-
-app = FastAPI(title="RYOPOS Server", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
-
-
-class RegisterModel(BaseModel):
-    fullname: str
-    phone: str
-    email: str
-    password: str
-
-class LoginModel(BaseModel):
-    email: str
-    password: str
-
-class BuyModel(BaseModel):
-    plan: str
-
-class HardwareModel(BaseModel):
-    purchase_id: int
-    hardware_id: str
-
-class ActivateModel(BaseModel):
-    hardware_id: str
-    license_code: str
-
-class ManualLicenseModel(BaseModel):
-    hardware_id: str
-    plan: str = "basic"
-    days: int = 36500
-    user_email: str = ""
-
-
-@app.get("/")
-async def root():
-    return {"status": "RYOPOS Server v2.0 OK"}
-
-
-@app.post("/auth/register")
-async def register(req: RegisterModel):
-    pw_hash = hashlib.sha256(req.password.encode()).hexdigest()
-    now = datetime.utcnow().isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
-        try:
-            cur = await db.execute(
-                "INSERT INTO users (fullname,phone,email,password_hash,created_at) VALUES(?,?,?,?,?)",
-                (req.fullname, req.phone, req.email, pw_hash, now)
-            )
-            await db.commit()
-            user_id = cur.lastrowid
-        except aiosqlite.IntegrityError:
-            raise HTTPException(400, "Email or phone already registered")
-    return {"token": make_token(user_id), "fullname": req.fullname}
-
-
-@app.post("/auth/login")
-async def login(req: LoginModel):
-    pw_hash = hashlib.sha256(req.password.encode()).hexdigest()
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM users WHERE email=? AND password_hash=?", (req.email, pw_hash)
-        ) as cur:
-            user = await cur.fetchone()
-    if not user:
-        raise HTTPException(401, "Wrong email or password")
-    return {"token": make_token(user["id"]), "fullname": user["fullname"]}
-
-
-@app.get("/auth/me")
-async def me(user_id: int = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT id,fullname,phone,email,created_at FROM users WHERE id=?", (user_id,)
-        ) as cur:
-            user = await cur.fetchone()
-    if not user:
-        raise HTTPException(404, "User not found")
-    return dict(user)
-
-
-@app.get("/purchases")
-async def my_purchases(user_id: int = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM purchases WHERE user_id=? ORDER BY created_at DESC", (user_id,)
-        ) as cur:
-            rows = await cur.fetchall()
-    return [dict(r) for r in rows]
-
-
-@app.post("/payment/request")
-async def payment_request(req: BuyModel, user_id: int = Depends(get_current_user)):
-    if req.plan not in PRICES:
-        raise HTTPException(400, "Invalid plan")
-    amount = PRICES[req.plan]
-    now = datetime.utcnow().isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
-        cur = await db.execute(
-            "INSERT INTO purchases (user_id,plan,amount,status,created_at) VALUES(?,?,?,'pending',?)",
-            (user_id, req.plan, amount, now)
-        )
-        await db.commit()
-        purchase_id = cur.lastrowid
-
-    payload = {
-        "merchant_id":  ZARINPAL_MERCHANT,
-        "amount":       amount,
-        "description":  f"RYOPOS License - {req.plan}",
-        "callback_url": f"{CALLBACK_URL}?purchase_id={purchase_id}",
-    }
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(ZARINPAL_REQUEST, json=payload, timeout=15)
-            data = resp.json()
-        except Exception as e:
-            raise HTTPException(503, f"ZarinPal error: {e}")
-
-    if data.get("data", {}).get("code") != 100:
-        raise HTTPException(400, f"ZarinPal error: {data.get('errors', data)}")
-
-    authority = data["data"]["authority"]
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute("UPDATE purchases SET authority=? WHERE id=?", (authority, purchase_id))
-        await db.commit()
-
-    return {"payment_url": f"{ZARINPAL_PAY}{authority}", "purchase_id": purchase_id, "amount": amount}
-
-
-@app.get("/payment/verify")
-async def payment_verify(Authority: str, Status: str, purchase_id: int):
-    fail_url = f"{FRONTEND_URL}?payment=failed"
-    ok_url   = f"{FRONTEND_URL}?payment=success&purchase_id={purchase_id}"
-
-    if Status != "OK":
-        return RedirectResponse(fail_url)
-
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM purchases WHERE id=?", (purchase_id,)) as cur:
-            purchase = await cur.fetchone()
-
-    if not purchase:
-        return RedirectResponse(fail_url)
-    if purchase["status"] == "paid":
-        return RedirectResponse(ok_url)
-
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(ZARINPAL_VERIFY, json={
-                "merchant_id": ZARINPAL_MERCHANT,
-                "amount":      purchase["amount"],
-                "authority":   Authority,
-            }, timeout=15)
-            data = resp.json()
-        except Exception:
-            return RedirectResponse(fail_url)
-
-    code = data.get("data", {}).get("code")
-    if code not in (100, 101):
-        return RedirectResponse(fail_url)
-
-    ref_id = str(data["data"]["ref_id"])
-    now = datetime.utcnow().isoformat()
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE purchases SET status='paid', ref_id=?, paid_at=? WHERE id=?",
-            (ref_id, now, purchase_id)
-        )
-        await db.commit()
-
-    return RedirectResponse(ok_url)
-
-
-@app.post("/purchases/set-hardware")
-async def set_hardware(req: HardwareModel, user_id: int = Depends(get_current_user)):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM purchases WHERE id=? AND user_id=?", (req.purchase_id, user_id)
-        ) as cur:
-            purchase = await cur.fetchone()
-
-    if not purchase:
-        raise HTTPException(404, "Purchase not found")
-    if purchase["status"] != "paid":
-        raise HTTPException(400, "Purchase not paid yet")
-    if purchase["license_key"]:
-        return {"license_key": purchase["license_key"], "hardware_id": purchase["hardware_id"], "plan": purchase["plan"]}
-
-    license_key = generate_license_key(req.hardware_id)
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "UPDATE purchases SET hardware_id=?, license_key=? WHERE id=?",
-            (req.hardware_id, license_key, req.purchase_id)
-        )
-        await db.commit()
-
-    return {"license_key": license_key, "hardware_id": req.hardware_id, "plan": purchase["plan"]}
-
-
-@app.get("/api/status/{hardware_id}")
-async def license_status(hardware_id: str):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM purchases WHERE hardware_id=? AND status='paid' ORDER BY paid_at DESC LIMIT 1",
-            (hardware_id,)
-        ) as cur:
-            purchase = await cur.fetchone()
-
-    if purchase:
-        return {
-            "status":         "active",
-            "plan":           purchase["plan"],
-            "days_remaining": -1,
-            "activated_at":   purchase["paid_at"],
-            "token":          purchase["license_key"][:32] if purchase["license_key"] else "",
-        }
-
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT created_at FROM trial_devices WHERE hardware_id=?", (hardware_id,)
-        ) as cur:
-            row = await cur.fetchone()
-
-    if row:
-        first_seen = datetime.fromisoformat(row["created_at"])
-        elapsed    = (datetime.utcnow() - first_seen).days
-        remaining  = max(0, 30 - elapsed)
-    else:
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute(
-                "INSERT OR IGNORE INTO trial_devices(hardware_id, created_at) VALUES(?,?)",
-                (hardware_id, datetime.utcnow().isoformat())
-            )
-            await db.commit()
-        remaining = 30
-
-    return {
-        "status":         "trial" if remaining > 0 else "expired",
-        "days_remaining": remaining,
-        "plan":           "none",
-    }
-
-
-@app.post("/api/activate")
-async def activate_with_key(req: ActivateModel):
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT * FROM purchases WHERE upper(license_key)=upper(?) AND status='paid'",
-            (req.license_code,)
-        ) as cur:
-            purchase = await cur.fetchone()
-
-    if not purchase:
-        raise HTTPException(404, "License key not found or invalid")
-
-    existing_hw = purchase["hardware_id"]
-    if existing_hw and existing_hw != req.hardware_id:
-        raise HTTPException(400, "This license is already activated on another device")
-
-    if not existing_hw:
-        async with aiosqlite.connect(DB_PATH) as db:
-            await db.execute(
-                "UPDATE purchases SET hardware_id=? WHERE id=?",
-                (req.hardware_id, purchase["id"])
-            )
-            await db.commit()
-
-    return {
-        "success": True,
-        "plan":    purchase["plan"],
-        "token":   purchase["license_key"],
-        "message": "License activated successfully",
-    }
-
-
-@app.post("/api/register")
-async def register_installation(data: dict):
-    return {"status": "ok", "registered": True}
-
-
-@app.get("/admin/users", dependencies=[Depends(verify_admin)])
-async def admin_users():
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute(
-            "SELECT id,fullname,phone,email,created_at FROM users ORDER BY id DESC"
-        ) as cur:
-            rows = await cur.fetchall()
-    return [dict(r) for r in rows]
-
-
-@app.get("/admin/purchases", dependencies=[Depends(verify_admin)])
-async def admin_purchases():
-    async with aiosqlite.connect(DB_PATH) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT * FROM purchases ORDER BY id DESC") as cur:
-            rows = await cur.fetchall()
-    return [dict(r) for r in rows]
-
-
-@app.post("/admin/generate-license", dependencies=[Depends(verify_admin)])
-async def admin_generate_license(req: ManualLicenseModel):
-    if req.plan not in ("basic", "premium"):
-        raise HTTPException(400, "Invalid plan")
-
-    license_key = generate_license_key(req.hardware_id, req.days)
-    now = datetime.utcnow().isoformat()
-    user_id = 0
-
-    if req.user_email:
-        async with aiosqlite.connect(DB_PATH) as db:
-            db.row_factory = aiosqlite.Row
-            async with db.execute(
-                "SELECT id FROM users WHERE email=?", (req.user_email,)
-            ) as cur:
-                user = await cur.fetchone()
-        if not user:
-            raise HTTPException(404, "User email not found - user must register first")
-        user_id = user["id"]
-
-    async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute(
-            "INSERT INTO purchases (user_id,plan,amount,hardware_id,license_key,status,created_at,paid_at) VALUES(?,?,0,?,?,'paid',?,?)",
-            (user_id, req.plan, req.hardware_id, license_key, now, now)
-        )
-        await db.commit()
-
-    return {"license_key": license_key, "hardware_id": req.hardware_id, "plan": req.plan, "user_id": user_id}
-
-
-if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=int(os.getenv("PORT", 8000)), reload=True)
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RYOPOS | پنل مدیریت</title>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#050810;--bg2:#080d1a;--card:rgba(255,255,255,0.04);--card-h:rgba(255,255,255,0.07);--border:rgba(255,255,255,0.08);--border-h:rgba(255,255,255,0.18);--accent:#c8832a;--accent-l:#e8a84a;--accent-g:rgba(200,131,42,0.3);--text:#f0ece4;--text2:#9a9485;--text3:#5a5650;--success:#2ecc71;--danger:#e74c3c;--warn:#f1c40f}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Vazirmatn',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+body::before{content:'';position:fixed;inset:0;background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(200,131,42,0.15) 0%,transparent 70%);pointer-events:none;z-index:0}
+.login-screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:100;background:var(--bg)}
+.login-box{background:rgba(12,17,35,0.97);border:1px solid var(--border-h);border-radius:18px;padding:3rem 2.5rem;width:100%;max-width:400px;text-align:center;animation:slideUp .4s ease}
+.login-logo{font-size:2rem;font-weight:900;letter-spacing:3px;background:linear-gradient(135deg,var(--accent-l),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:.3rem}
+.login-sub{font-size:.8rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:2.5rem}
+.login-box input{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:9px;padding:.85rem 1.1rem;font-size:.95rem;font-family:'Vazirmatn',sans-serif;color:var(--text);outline:none;transition:border .2s;margin-bottom:1rem;text-align:center;letter-spacing:3px}
+.login-box input:focus{border-color:rgba(200,131,42,.5)}
+.login-box input::placeholder{letter-spacing:0;color:var(--text3)}
+.login-err{font-size:.82rem;color:var(--danger);margin-bottom:1rem;display:none}
+.login-err.show{display:block}
+.layout{display:none;min-height:100vh}
+.layout.show{display:flex}
+.sidebar{width:240px;flex-shrink:0;background:rgba(8,13,26,0.95);border-left:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;right:0;bottom:0;z-index:50;backdrop-filter:blur(20px)}
+.sidebar-logo{padding:1.5rem 1.5rem 1rem;border-bottom:1px solid var(--border)}
+.sidebar-logo-text{font-size:1.3rem;font-weight:900;letter-spacing:2px;background:linear-gradient(135deg,var(--accent-l),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.sidebar-logo-sub{font-size:.65rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-top:.2rem}
+.sidebar-nav{padding:1rem .8rem;flex:1;display:flex;flex-direction:column;gap:.3rem}
+.nav-item{display:flex;align-items:center;gap:.8rem;padding:.75rem 1rem;border-radius:9px;cursor:pointer;color:var(--text2);font-size:.9rem;font-weight:500;transition:all .2s;border:1px solid transparent}
+.nav-item:hover{background:var(--card);color:var(--text)}
+.nav-item.active{background:rgba(200,131,42,.12);border-color:rgba(200,131,42,.25);color:var(--accent-l)}
+.nav-item .icon{font-size:1.1rem;width:22px;text-align:center;flex-shrink:0}
+.sidebar-footer{padding:1rem 1.5rem;border-top:1px solid var(--border)}
+.sidebar-footer button{width:100%;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.25);border-radius:8px;color:#e74c3c;font-family:'Vazirmatn',sans-serif;font-size:.85rem;font-weight:600;padding:.65rem;cursor:pointer;transition:all .2s}
+.sidebar-footer button:hover{background:rgba(231,76,60,.2)}
+.main{margin-right:240px;flex:1;padding:2rem 2.5rem;position:relative;z-index:1}
+.page{display:none}
+.page.active{display:block}
+.page-title{font-size:1.5rem;font-weight:800;margin-bottom:.3rem}
+.page-sub{font-size:.85rem;color:var(--text3);margin-bottom:2rem}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;margin-bottom:2rem}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;position:relative;overflow:hidden;transition:border .2s}
+.stat-card:hover{border-color:var(--border-h)}
+.stat-label{font-size:.72rem;color:var(--text3);font-weight:700;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:.6rem}
+.stat-val{font-size:2rem;font-weight:900;background:linear-gradient(135deg,#fff,var(--accent-l));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
+.stat-icon{position:absolute;top:1.2rem;left:1.2rem;font-size:1.5rem;opacity:.3}
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.table-head{padding:1.2rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem}
+.table-title{font-size:1rem;font-weight:700}
+.search-input{background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;padding:.5rem 1rem;font-size:.85rem;font-family:'Vazirmatn',sans-serif;color:var(--text);outline:none;width:220px;transition:border .2s}
+.search-input:focus{border-color:rgba(200,131,42,.4)}
+.search-input::placeholder{color:var(--text3)}
+table{width:100%;border-collapse:collapse}
+th{padding:.9rem 1.2rem;text-align:right;font-size:.72rem;font-weight:700;color:var(--text3);letter-spacing:1px;text-transform:uppercase;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:.9rem 1.2rem;font-size:.85rem;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+.badge{display:inline-flex;align-items:center;gap:.3rem;padding:.25rem .75rem;border-radius:100px;font-size:.72rem;font-weight:600}
+.badge-paid{background:rgba(46,204,113,.12);border:1px solid rgba(46,204,113,.25);color:var(--success)}
+.badge-pending{background:rgba(241,196,15,.1);border:1px solid rgba(241,196,15,.25);color:var(--warn)}
+.badge-failed{background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.25);color:var(--danger)}
+.badge-premium{background:rgba(200,131,42,.12);border:1px solid rgba(200,131,42,.3);color:var(--accent-l)}
+.badge-basic{background:rgba(255,255,255,.06);border:1px solid var(--border-h);color:var(--text2)}
+.mono{font-family:monospace;font-size:.78rem;color:var(--text2)}
+.copy-btn{background:none;border:none;color:var(--accent);cursor:pointer;font-size:.8rem;padding:.2rem .4rem;border-radius:4px;transition:background .2s}
+.copy-btn:hover{background:rgba(200,131,42,.1)}
+.empty-state{text-align:center;padding:4rem;color:var(--text3)}
+.empty-state .emoji{font-size:3rem;margin-bottom:1rem}
+.btn{padding:.55rem 1.2rem;border-radius:7px;font-size:.85rem;font-weight:600;cursor:pointer;border:none;font-family:'Vazirmatn',sans-serif;transition:all .25s;display:inline-flex;align-items:center;gap:.5rem}
+.btn-gold{background:linear-gradient(135deg,var(--accent),#a06520);color:#fff;box-shadow:0 0 15px var(--accent-g)}
+.btn-gold:hover{transform:translateY(-1px)}
+.btn-outline{background:transparent;border:1px solid var(--border-h);color:var(--text)}
+.btn-outline:hover{background:var(--card-h)}
+.btn-danger{background:rgba(231,76,60,.12);border:1px solid rgba(231,76,60,.3);color:var(--danger)}
+.btn-danger:hover{background:rgba(231,76,60,.22)}
+.btn-success{background:rgba(46,204,113,.12);border:1px solid rgba(46,204,113,.3);color:var(--success)}
+.btn-success:hover{background:rgba(46,204,113,.22)}
+.btn-sm{padding:.35rem .8rem;font-size:.78rem}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);z-index:200;display:none;align-items:center;justify-content:center;padding:1rem}
+.overlay.show{display:flex}
+.modal{background:rgba(12,17,35,.97);border:1px solid var(--border-h);border-radius:14px;padding:2rem;width:100%;max-width:480px;position:relative;animation:slideUp .3s ease}
+.modal-close{position:absolute;top:.8rem;left:.8rem;background:var(--card);border:1px solid var(--border);border-radius:5px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--text2);font-size:.85rem}
+.modal-close:hover{background:var(--card-h)}
+.modal-title{font-size:1.2rem;font-weight:800;margin-bottom:1.5rem}
+.form-group{margin-bottom:1rem}
+label{display:block;font-size:.78rem;font-weight:700;color:var(--text2);margin-bottom:.4rem;letter-spacing:.5px}
+input,select{width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:8px;padding:.7rem 1rem;font-size:.9rem;font-family:'Vazirmatn',sans-serif;color:var(--text);outline:none;transition:border .2s}
+input:focus,select:focus{border-color:rgba(200,131,42,.5)}
+select option{background:#0d1225}
+.toast-wrap{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);z-index:500;display:flex;flex-direction:column;gap:.5rem;align-items:center;pointer-events:none}
+.toast{background:rgba(20,25,45,.97);border:1px solid var(--border-h);border-radius:9px;padding:.65rem 1.3rem;font-size:.85rem;color:var(--text);display:flex;align-items:center;gap:.5rem;box-shadow:0 8px 30px rgba(0,0,0,.5);animation:toastIn .3s ease;white-space:nowrap}
+.toast.success{border-color:rgba(46,204,113,.35);color:var(--success)}
+.toast.error{border-color:rgba(231,76,60,.35);color:var(--danger)}
+.spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+.license-detail{background:rgba(200,131,42,.06);border:1px solid rgba(200,131,42,.2);border-radius:8px;padding:.8rem 1rem;margin-top:.5rem}
+.license-detail .key{font-family:monospace;font-size:.72rem;color:var(--text2);word-break:break-all;line-height:1.6}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:900px){.stat-grid{grid-template-columns:repeat(2,1fr)}.main{padding:1.5rem}}
+@media(max-width:700px){.sidebar{display:none}.main{margin-right:0}}
+</style>
+</head>
+<body>
+<div class="toast-wrap" id="toastWrap"></div>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-box">
+    <div class="login-logo">RYOPOS</div>
+    <div class="login-sub">پنل مدیریت</div>
+    <input type="password" id="adminPass" placeholder="رمز عبور ادمین" onkeydown="if(event.key==='Enter')doAdminLogin()">
+    <div class="login-err" id="loginErr">رمز عبور اشتباه است</div>
+    <button class="btn btn-gold" style="width:100%;justify-content:center;padding:.85rem" onclick="doAdminLogin()">ورود به پنل</button>
+  </div>
+</div>
+
+<div class="layout" id="adminLayout">
+  <aside class="sidebar">
+    <div class="sidebar-logo">
+      <div class="sidebar-logo-text">RYOPOS</div>
+      <div class="sidebar-logo-sub">Admin Panel</div>
+    </div>
+    <nav class="sidebar-nav">
+      <div class="nav-item active" onclick="showPage('dashboard',this)"><span class="icon">📊</span> داشبورد</div>
+      <div class="nav-item" onclick="showPage('users',this)"><span class="icon">👥</span> کاربران</div>
+      <div class="nav-item" onclick="showPage('purchases',this)"><span class="icon">💳</span> خریدها</div>
+      <div class="nav-item" onclick="showPage('licenses',this)"><span class="icon">🔑</span> لایسنس‌ها</div>
+      <div class="nav-item" onclick="showPage('makeLicense',this)"><span class="icon">✨</span> صدور دستی</div>
+    </nav>
+    <div class="sidebar-footer"><button onclick="adminLogout()">خروج از پنل</button></div>
+  </aside>
+
+  <main class="main">
+
+    <!-- DASHBOARD -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-title">داشبورد</div>
+      <div class="page-sub">خلاصه وضعیت سیستم</div>
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-icon">👥</div><div class="stat-label">کل کاربران</div><div class="stat-val" id="s-users">—</div></div>
+        <div class="stat-card"><div class="stat-icon">💳</div><div class="stat-label">خریدهای موفق</div><div class="stat-val" id="s-paid">—</div></div>
+        <div class="stat-card"><div class="stat-icon">🔑</div><div class="stat-label">لایسنس‌های فعال</div><div class="stat-val" id="s-licenses">—</div></div>
+        <div class="stat-card"><div class="stat-icon">💰</div><div class="stat-label">درآمد کل (M)</div><div class="stat-val" id="s-revenue">—</div></div>
+      </div>
+      <div class="table-wrap">
+        <div class="table-head"><div class="table-title">آخرین خریدها</div></div>
+        <table><thead><tr><th>خریدار</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>تاریخ</th></tr></thead>
+        <tbody id="recentPurchases"><tr><td colspan="5" style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></td></tr></tbody></table>
+      </div>
+    </div>
+
+    <!-- USERS -->
+    <div class="page" id="page-users">
+      <div class="page-title">مدیریت کاربران</div>
+      <div class="page-sub">لیست تمام کاربران ثبت‌نام‌شده</div>
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">کاربران <span id="userCount" style="color:var(--text3);font-weight:400;font-size:.85rem"></span></div>
+          <input class="search-input" placeholder="🔍 جستجو..." oninput="filterTable('usersTable',this.value)">
+        </div>
+        <table id="usersTable">
+          <thead><tr><th>#</th><th>نام</th><th>ایمیل</th><th>موبایل</th><th>کد ملی</th><th>تاریخ</th><th>عملیات</th></tr></thead>
+          <tbody id="usersList"><tr><td colspan="7" style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PURCHASES -->
+    <div class="page" id="page-purchases">
+      <div class="page-title">مدیریت خریدها</div>
+      <div class="page-sub">تمام تراکنش‌های ثبت‌شده</div>
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">خریدها <span id="purchaseCount" style="color:var(--text3);font-weight:400;font-size:.85rem"></span></div>
+          <input class="search-input" placeholder="🔍 جستجو..." oninput="filterTable('purchasesTable',this.value)">
+        </div>
+        <table id="purchasesTable">
+          <thead><tr><th>#</th><th>خریدار</th><th>پلن</th><th>مبلغ</th><th>وضعیت</th><th>Hardware ID</th><th>فعال/غیرفعال</th><th>تاریخ</th></tr></thead>
+          <tbody id="purchasesList"><tr><td colspan="8" style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- LICENSES -->
+    <div class="page" id="page-licenses">
+      <div class="page-title">لایسنس‌های صادرشده</div>
+      <div class="page-sub">لیست تمام کدهای لایسنس</div>
+      <div class="table-wrap">
+        <div class="table-head">
+          <div class="table-title">لایسنس‌ها <span id="licenseCount" style="color:var(--text3);font-weight:400;font-size:.85rem"></span></div>
+          <input class="search-input" placeholder="🔍 جستجو..." oninput="filterTable('licensesTable',this.value)">
+        </div>
+        <table id="licensesTable">
+          <thead><tr><th>#</th><th>خریدار</th><th>پلن</th><th>Hardware ID</th><th>کلید لایسنس</th><th>وضعیت</th><th>تاریخ</th></tr></thead>
+          <tbody id="licensesList"><tr><td colspan="7" style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- MAKE LICENSE -->
+    <div class="page" id="page-makeLicense">
+      <div class="page-title">صدور لایسنس دستی</div>
+      <div class="page-sub">برای کاربران خاص بدون پرداخت آنلاین لایسنس صادر کن</div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:2rem;max-width:500px">
+        <div class="form-group">
+          <label>ایمیل کاربر (باید در سایت ثبت‌نام کرده باشد)</label>
+          <input type="email" id="manualEmail" placeholder="customer@email.com">
+        </div>
+        <div class="form-group">
+          <label>Hardware ID کاربر</label>
+          <input type="text" id="manualHwId" placeholder="RYO-XXXX-XXXX-XXXX یا هر ID">
+        </div>
+        <div class="form-group">
+          <label>پلن</label>
+          <select id="manualPlan"><option value="basic">پایه</option><option value="premium">پریمیوم</option></select>
+        </div>
+        <div class="form-group">
+          <label>مدت اعتبار (روز)</label>
+          <input type="number" id="manualDays" value="36500" min="1" max="36500">
+        </div>
+        <button class="btn btn-gold" onclick="generateManual()" id="genBtn">✨ صدور لایسنس</button>
+        <div id="manualResult" style="display:none;margin-top:1.5rem">
+          <div class="license-detail">
+            <div style="font-size:.75rem;color:var(--accent);font-weight:700;letter-spacing:1px;margin-bottom:.5rem">🔑 کلید لایسنس صادرشده</div>
+            <div class="key" id="manualLicenseKey"></div>
+            <button class="copy-btn" style="margin-top:.5rem" onclick="copyText(document.getElementById('manualLicenseKey').textContent)">📋 کپی</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="overlay" id="userModal" onclick="closeOverlay(event,'userModal')">
+  <div class="modal">
+    <div class="modal-close" onclick="closeModal('userModal')">✕</div>
+    <div class="modal-title">جزئیات کاربر</div>
+    <div id="userModalContent"></div>
+  </div>
+</div>
+
+<script>
+const API       = 'https://ryopos-server-production.up.railway.app';
+const ADMIN_KEY = 'Re48654172281';
+
+function doAdminLogin() {
+  const pass = document.getElementById('adminPass').value;
+  if (pass === ADMIN_KEY) {
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('adminLayout').classList.add('show');
+    loadDashboard();
+  } else {
+    document.getElementById('loginErr').classList.add('show');
+    document.getElementById('adminPass').value = '';
+  }
+}
+document.getElementById('adminPass').addEventListener('keydown', e => { if(e.key==='Enter') doAdminLogin(); });
+
+function adminLogout() {
+  document.getElementById('loginScreen').style.display = 'flex';
+  document.getElementById('adminLayout').classList.remove('show');
+  document.getElementById('adminPass').value = '';
+  document.getElementById('loginErr').classList.remove('show');
+}
+
+async function api(path) {
+  const res = await fetch(API + path, { headers: { 'X-Admin-Key': ADMIN_KEY } });
+  if (!res.ok) throw new Error('خطای سرور');
+  return res.json();
+}
+
+function showPage(name, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  el.classList.add('active');
+  if (name==='dashboard')  loadDashboard();
+  if (name==='users')      loadUsers();
+  if (name==='purchases')  loadPurchases();
+  if (name==='licenses')   loadLicenses();
+}
+
+async function loadDashboard() {
+  try {
+    const [users, purchases] = await Promise.all([api('/admin/users'), api('/admin/purchases')]);
+    const paid     = purchases.filter(p => p.status === 'paid');
+    const licenses = purchases.filter(p => p.license_key);
+    const revenue  = paid.reduce((s,p) => s + (p.amount||0), 0);
+    document.getElementById('s-users').textContent    = users.length;
+    document.getElementById('s-paid').textContent     = paid.length;
+    document.getElementById('s-licenses').textContent = licenses.length;
+    document.getElementById('s-revenue').textContent  = (revenue/1000000).toFixed(1) + 'M';
+    const recent = paid.slice(0,8);
+    document.getElementById('recentPurchases').innerHTML = recent.length
+      ? recent.map(p => `<tr>
+          <td>${p.fullname||'—'}<br><span class="mono" style="font-size:.7rem;color:var(--text3)">${p.email||''}</span></td>
+          <td><span class="badge badge-${p.plan}">${p.plan==='premium'?'پریمیوم ✦':'پایه'}</span></td>
+          <td>${Number(p.amount).toLocaleString('fa-IR')} ت</td>
+          <td><span class="badge badge-paid">✓ موفق</span></td>
+          <td>${fDate(p.paid_at)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" class="empty-state"><div class="emoji">📭</div>خریدی ثبت نشده</td></tr>';
+  } catch(e) { toast('خطا در بارگذاری داشبورد: ' + e.message, 'error'); }
+}
+
+async function loadUsers() {
+  document.getElementById('usersList').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></td></tr>';
+  try {
+    const users = await api('/admin/users');
+    document.getElementById('userCount').textContent = `(${users.length} نفر)`;
+    document.getElementById('usersList').innerHTML = users.length
+      ? users.map((u,i) => `<tr>
+          <td class="mono">${i+1}</td>
+          <td style="font-weight:600">${u.fullname}</td>
+          <td class="mono">${u.email}</td>
+          <td class="mono">${u.phone}</td>
+          <td class="mono">${u.national_id||'—'}</td>
+          <td>${fDate(u.created_at)}</td>
+          <td><button class="btn btn-outline btn-sm" onclick="showUserDetail(${u.id})">جزئیات</button></td>
+        </tr>`).join('')
+      : '<tr><td colspan="7" class="empty-state"><div class="emoji">👥</div>کاربری ثبت نشده</td></tr>';
+  } catch(e) { toast('خطا: '+e.message,'error'); }
+}
+
+async function showUserDetail(userId) {
+  document.getElementById('userModal').classList.add('show');
+  document.getElementById('userModalContent').innerHTML = '<div style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></div>';
+  try {
+    const purchases = await api('/admin/purchases');
+    const userPurchases = purchases.filter(p => p.user_id === userId);
+    const paid = userPurchases.filter(p => p.status==='paid');
+    document.getElementById('userModalContent').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:9px;padding:1rem;text-align:center">
+          <div style="font-size:.7rem;color:var(--text3);margin-bottom:.3rem">کل خرید</div>
+          <div style="font-size:1.5rem;font-weight:800;color:var(--accent-l)">${userPurchases.length}</div>
+        </div>
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:9px;padding:1rem;text-align:center">
+          <div style="font-size:.7rem;color:var(--text3);margin-bottom:.3rem">خرید موفق</div>
+          <div style="font-size:1.5rem;font-weight:800;color:var(--success)">${paid.length}</div>
+        </div>
+      </div>
+      ${paid.map(p=>`
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:9px;padding:1rem;margin-bottom:.7rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.5rem">
+            <span class="badge badge-${p.plan}">${p.plan==='premium'?'پریمیوم':'پایه'}</span>
+            <span style="font-size:.82rem;color:var(--text2)">${Number(p.amount).toLocaleString('fa-IR')} تومان</span>
+          </div>
+          ${p.hardware_id?`<div style="font-size:.72rem;color:var(--text3)">HW: <span class="mono">${p.hardware_id}</span></div>`:''}
+          ${p.license_key?`<div class="license-detail"><div class="key">${p.license_key}</div><button class="copy-btn" onclick="copyText('${p.license_key}')">📋 کپی</button></div>`:'<div style="font-size:.78rem;color:var(--warn);margin-top:.4rem">⏳ هنوز Hardware ID وارد نشده</div>'}
+        </div>
+      `).join('')||'<div style="text-align:center;padding:1.5rem;color:var(--text3)">خریدی ثبت نشده</div>'}
+    `;
+  } catch(e) { document.getElementById('userModalContent').innerHTML=`<div style="color:var(--danger)">${e.message}</div>`; }
+}
+
+async function loadPurchases() {
+  document.getElementById('purchasesList').innerHTML = '<tr><td colspan="8" style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></td></tr>';
+  try {
+    const purchases = await api('/admin/purchases');
+    document.getElementById('purchaseCount').textContent = `(${purchases.length} مورد)`;
+    document.getElementById('purchasesList').innerHTML = purchases.length
+      ? purchases.map((p,i) => `<tr>
+          <td class="mono">${i+1}</td>
+          <td>${p.fullname||'—'}<br><span class="mono" style="font-size:.7rem;color:var(--text3)">${p.email||''}</span></td>
+          <td><span class="badge badge-${p.plan}">${p.plan==='premium'?'پریمیوم ✦':'پایه'}</span></td>
+          <td>${Number(p.amount).toLocaleString('fa-IR')} ت</td>
+          <td><span class="badge badge-${p.status}">${statusText(p.status)}</span></td>
+          <td class="mono" style="font-size:.72rem">${p.hardware_id?p.hardware_id.slice(0,16)+'...':'—'}</td>
+          <td>${p.status==='paid'?`<button class="btn btn-sm ${p.is_active?'btn-danger':'btn-success'}" onclick="toggleLicense(${p.id},${p.is_active?0:1})">${p.is_active?'🔴 غیرفعال':'🟢 فعال'}</button>`:'—'}</td>
+          <td>${fDate(p.created_at)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="8" class="empty-state"><div class="emoji">📭</div>خریدی ثبت نشده</td></tr>';
+  } catch(e) { toast('خطا: '+e.message,'error'); }
+}
+
+async function loadLicenses() {
+  document.getElementById('licensesList').innerHTML = '<tr><td colspan="7" style="text-align:center;padding:2rem"><div class="spinner" style="margin:0 auto"></div></td></tr>';
+  try {
+    const purchases = await api('/admin/purchases');
+    const withLic = purchases.filter(p => p.license_key);
+    document.getElementById('licenseCount').textContent = `(${withLic.length} مورد)`;
+    document.getElementById('licensesList').innerHTML = withLic.length
+      ? withLic.map((p,i) => `<tr>
+          <td class="mono">${i+1}</td>
+          <td>${p.fullname||'—'}</td>
+          <td><span class="badge badge-${p.plan}">${p.plan==='premium'?'پریمیوم ✦':'پایه'}</span></td>
+          <td class="mono" style="font-size:.72rem">${p.hardware_id?p.hardware_id:'—'}</td>
+          <td><span class="mono" style="font-size:.75rem">${p.license_key}</span>
+              <button class="copy-btn" onclick="copyText('${p.license_key}')">📋</button></td>
+          <td>${p.is_active?'<span class="badge badge-paid">✓ فعال</span>':'<span class="badge badge-failed">✗ غیرفعال</span>'}</td>
+          <td>${fDate(p.paid_at)}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="7" class="empty-state"><div class="emoji">🔑</div>لایسنسی صادر نشده</td></tr>';
+  } catch(e) { toast('خطا: '+e.message,'error'); }
+}
+
+async function toggleLicense(purchaseId, isActive) {
+  try {
+    const res = await fetch(API + '/admin/toggle-license', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'X-Admin-Key': ADMIN_KEY },
+      body: JSON.stringify({ purchase_id: purchaseId, is_active: isActive })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail);
+    toast(isActive ? '🟢 لایسنس فعال شد' : '🔴 لایسنس غیرفعال شد', isActive ? 'success' : 'error');
+    loadPurchases();
+    loadLicenses();
+    loadDashboard();
+  } catch(e) { toast('خطا: '+e.message,'error'); }
+}
+
+async function generateManual() {
+  const email = document.getElementById('manualEmail').value.trim();
+  const hwId  = document.getElementById('manualHwId').value.trim();
+  const plan  = document.getElementById('manualPlan').value;
+  const days  = parseInt(document.getElementById('manualDays').value);
+  const btn   = document.getElementById('genBtn');
+
+  if (!email) { toast('ایمیل کاربر را وارد کنید', 'error'); return; }
+  if (!hwId)  { toast('Hardware ID را وارد کنید', 'error'); return; }
+
+  btn.innerHTML = '<span class="spinner"></span> در حال صدور...';
+  btn.disabled = true;
+
+  try {
+    const res = await fetch(API + '/admin/generate-license', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json', 'X-Admin-Key': ADMIN_KEY },
+      body: JSON.stringify({ hardware_id: hwId, plan, days, user_email: email })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail);
+    document.getElementById('manualLicenseKey').textContent = data.license_key;
+    document.getElementById('manualResult').style.display = 'block';
+    toast('✅ لایسنس صادر شد و به داشبورد کاربر اضافه شد!', 'success');
+  } catch(e) { toast('خطا: '+e.message,'error');
+  } finally {
+    btn.innerHTML = '✨ صدور لایسنس';
+    btn.disabled = false;
+  }
+}
+
+function fDate(d) { if(!d) return '—'; try{ return new Date(d).toLocaleDateString('fa-IR'); } catch{ return d; } }
+function statusText(s) { return {paid:'✓ موفق',pending:'در انتظار',failed:'ناموفق'}[s]||s; }
+function filterTable(tableId, q) { document.getElementById(tableId).querySelectorAll('tbody tr').forEach(r=>{ r.style.display=r.textContent.includes(q)?'':'none'; }); }
+function copyText(t) { navigator.clipboard.writeText(t).then(()=>toast('✅ کپی شد!','success')); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function closeOverlay(e,id) { if(e.target.id===id) closeModal(id); }
+function toast(msg, type='', dur=3500) {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toastWrap').appendChild(el);
+  setTimeout(()=>el.remove(), dur);
+}
+</script>
+</body>
+</html>
